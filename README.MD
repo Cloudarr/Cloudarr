@@ -164,6 +164,7 @@ This sets up the database and sets the write executable > permissions.
 
 ### NZBHydra (Beta)
 > **Torrent Indexer**
+>
 > VPN Protected. Integrates with Sonarr, Radarr, Readarr, Lidarr, and Bazarr. You should use this as the primary indexer. Use Jackett to create configs from  public trackers, export the configs and import them here.
 > 
 ### Picard
@@ -178,6 +179,7 @@ This sets up the database and sets the write executable > permissions.
 
 ### qBittorrent
 > **Bittorrent Download Client**
+>
 > VPN Protected. Integrates with Sonarr, Radarr, Readarr, Lidarr, and Bazarr Downloads requested torrent files.
 
 ### Radarr
