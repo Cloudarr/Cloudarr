@@ -27,14 +27,18 @@ sudo apt install python3 -y
 
 ## Logins:
 
-> ### Guacamole
+### Guacamole
 > **First Time Login**
 >  - Username: guacadmin
-> - Password: guacadmin
+>  - Password: guacadmin
 
+### Authelia
+> **First Time Login**
+>  - Username: admin
+>  - Password: password
 
 ## Technologies:
-> ### AdGuardHome
+### AdGuardHome
 > **Home Ad-Blocking DNS**
 > 
 > If you want to use adguard's dns and you're deploying on a modern version of ubuntu or raspbian run the below commands to free up port 53, this might break your local dns though. You will need to modify ADGUARD_DNS_PORT in `./.ENV` and uncomment port > 53 in ./docker-compose-network.yml in order to enable DNS.
@@ -50,46 +54,46 @@ sudo apt install python3 -y
 > sudo systemctl start systemd-resolved
 > ```
 
-> ### AudioBookShelf
+### AudioBookShelf
 > **AudiBook Player / Server**
 > Web-based playback of audiobooks.
 
-> ### Authelia
+### Authelia
 > **Access Management**
 >
 > Authelia (and Traefik) are configured with `.env` and `config.py` or `config.json`. You can add more users by editing ./config/authelia/users_database.yml. With some > elbow grease you can connect Authelia to AD / LDAP / OpenAuth etc. 
 
-> ### Bazarr
+### Bazarr
 > **Subtitle Downloader**
 > 
 > VPN-Protected. Integrates with Sonarr and Radarr.
 
-> ### Cloudflare DDNS
+### Cloudflare DDNS
 > **Cloudflare Dynamic DNS Drone**
 > 
 > Keeps your IP up-to-date with Cloudflare DDNS
 
-> ### ExpressVPN
+### ExpressVPN
 > **Docker VPN Network Client**
 > 
 > Obscures sensitive Docker container communications
 
-> ### FileBot
+### FileBot
 > **Video File Metadata Download / Renamer**
 > 
 > Download and applies metadata to shows and movies. Allows easy renaming and sorting.
 
-> ### FileBrowser
+### FileBrowser
 > **Consolidated Media File Browser**
 > 
 > Collects the various media and download folders specified in `./env` into a singe web-based file viewer and manager. Simplifies browsing collections stored across multiple folders / drives / NASs.
 
-> ### Flaresolverr
+### Flaresolverr
 > **Cloudflare Captcha Solver**
 >
 > VPN Protected. Integrates with Sonarr, Radarr, Readarr, Lidarr, and Bazarr.
 
-> ### Guacamole+Guacd
+### Guacamole+Guacd
 > **Web-Based RDP & VNC Client**
 >
 > In order to prepare on Ubuntu / Raspbian see `./prepare.sh`
@@ -111,103 +115,103 @@ This sets up the database and sets the write executable > permissions.
 > echo "done"
 > ```
 
-> ### Homeassistant
+### Homeassistant
 > **Home Automation Tool**
 >
 > Automate your house and add functionality with plugins / apps.
 
-> ### Homepage
+### Homepage
 > **Customizable Homepage**
 >
 >  Homepage is generated from `config.py` or `config.json`. The homepage layout is regenerated any time `apply_config.py` is run. `apply_config.py` is run as part of `compose-up.sh` 
 
-> ### IT-Tools
+### IT-Tools
 > **Collection of Useful IT-Professional Tools**
 >
 > Includes a ton of useful IT tools including caclulators, generators, and lookups.
 
-> ### Jackett
+### Jackett
 > **Torrent Indexer**
 > 
 > Integrates with Sonarr, Radarr, Readarr, Lidarr, and Bazarr.
 >
 > You should use this to build an indexer list using it's "public servers" tool then export them to NZBHydra
 
-> ### Jellyfin
+### Jellyfin
 > **Media Player**
 >
 > Integrates with Sonarr, Radarr, Lidarr, and Jellyseerr
 
-> ### Jellyseerr
+### Jellyseerr
 > **Jellyfin Torrent Manager**
 >
 > Integrates with Sonarr, Radarr, and Jellyfin
 
-> ### Kavita (Beta)
+### Kavita (Beta)
 > **Web-Based eBook Library / Reader / Server**
 >
 > Friendly web-based eBook libary / reader
 
-> ### Lidarr
+### Lidarr
 > **Music Torrent Downloader**
 >
 > VPN Protected. Integrates with qBittorrent
 
-> ### Navidrome
+### Navidrome
 > **Web-Based Music Library / Player / Server**
 >
 > Works with DSUB App on Apple / Android
 
-> ### NZBHydra (Beta)
+### NZBHydra (Beta)
 > **Torrent Indexer**
 > VPN Protected. Integrates with Sonarr, Radarr, Readarr, Lidarr, and Bazarr. You should use this as the primary indexer. Use Jackett to create configs from  public trackers, export the configs and import them here.
 > 
-> ### Picard
+### Picard
 > **Music Metadata Downloader / Renamer**
 >
 > Downloads music and audiobook metadata and renames files.
 
-> ### Portainer
+### Portainer
 > **Docker Container Manager**
 >
 > Manages containers and allow easy access to logs.
 
-> ### qBittorrent
+### qBittorrent
 > **Bittorrent Download Client**
 > VPN Protected. Integrates with Sonarr, Radarr, Readarr, Lidarr, and Bazarr Downloads requested torrent files.
 
-> ### Radarr
+### Radarr
 > **Movie Torrent Downloader**
 >
 > VPN Protected. Integrates with Jellyseerr and qBittorrent
 
-> ### Readarr (Beta)
+### Readarr (Beta)
 > **Book Torrent Downloader**
 >
 > VPN Protected. Integrates with Jellyseerr and qBittorrent
 
-> ### Traefik
+### Traefik
 > **Network Proxy**
 >
 > Handles proxy / routing. enables secure routing so ports don't have to be exposed.
 
-> ### Unpackerr
+### Unpackerr
 > **Compresed File Download Handler**
 >
 > Handles downloaded file decompression. Integrates with Sonarr, Radarr, Readarr,Lidarr, and Bazarr. 
 
-> ### VaultWarden
+### VaultWarden
 > **Password Manager**
 >
 > Securely configured password manager. Set `VW_SIGNUPS_ALLOWED` to `false` after first time login/setup. 
 
-> ### WhatsUpDocker
+### WhatsUpDocker
 > **Docker Container Update Manager**
 >
 > Monitors Docker containers for update availability.
 > Program triggers and upate schedules.  
 
-> ### YouTubeDL
+### YouTubeDL
 > **YouTube Video Downloader**
 >
 > Downloads videos from YouTube in both audio and video format.
