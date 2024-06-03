@@ -168,7 +168,7 @@ users:
     groups:
       - admins
       - dev
-  angel:
+  {env_map.get('AUTHELIA_USER_USERNAME')}::
     disabled: false
     displayname: "{env_map.get('AUTHELIA_USER_USERNAME')}"
     password: "{env_map.get('AUTHELIA_USER_PASSWORD_HASH')}"
