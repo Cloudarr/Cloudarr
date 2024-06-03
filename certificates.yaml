@@ -1,0 +1,10 @@
+tls:
+  certificates:
+    - certFile: /cloudflare_certs/${DOMAINNAME}.crt
+    - keyFile:  /cloudflare_certs/${DOMAINNAME}.key
+  # stores:
+  #   default:
+  #     defaultCertificate:
+  #       certFile: /cloudflare_certs/${DOMAINNAME}.crt
+  #       keyFile: /cloudflare_certs/${DOMAINNAME}.key
+  

@@ -1,0 +1,53 @@
+{
+  "routes":[
+    ["primary", "https://192.168.1.101/", true, "intermediate"],
+    ["secondary", "http://192.168.1.201/", false, "intermediate"],
+    ["tertiary", "https://192.168.1.27/", true, "modern"]
+  ],
+  "descriptions":{
+    "primary":"Primary Server (ESXi)",
+    "secondary":"Secondary Server (Unraid)",
+    "tertiary":"Tertiary Server (Unraid)"
+  },
+  "layout":{
+    "Players": {
+      "Jellyfin": "jellyfin",
+      "Kavita": "kavita",
+      "Navidrome": "navidrome"
+    },
+    "Requesters": {
+      "Jellyseerr": "jellyseerr",
+      "Sonarr": "sonarr",
+      "Radarr": "radarr",
+      "Readarr": "readarr",
+      "Lidarr": "lidarr",
+      "Bazarr": "bazarr",
+      "YouTube-DL": "youtubedl"
+    },
+    "Torrents": {
+      "Qbittorrent": "qbittorrent",
+      "Jackett": "jackett",
+      "Nzbhydra": "nzbhydra"
+    },
+    "File Management": {
+      "Media Browser": "filebrowser",
+      "FileBot": "filebot",
+      "MusicBrainz Picard": "picard"
+    },
+    "Services": {
+      "HomeAssistant": "homeassistant",
+      "AdGuard": "adguard",
+      "IT-Tools": "it-tools"
+    },
+    "Admin": {
+      "Traefik Dashboard": "traefik",
+      "Portainer": "portainer",
+      "WhatsUp": "whatsup"
+    },
+    "Servers": {
+      "Primary": "primary",
+      "Secondary": "secondary",
+      "Tertiary": "tertiary"
+    }
+  }
+}

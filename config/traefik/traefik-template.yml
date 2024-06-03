@@ -1,0 +1,39 @@
+log:
+  level: DEBUG
+  filepath: 'traefik_logs/traefik.log'
+  
+api:
+  insecure: true
+  dashboard: true
+
+entryPoints:
+  http:
+    address: ":80"
+    
+  https:
+    address: ":443"
+    http:
+      tls:
+        certResolver: cloudflare
+        domains:
+          - main: $DOMAINNAME
+            sans:
+              - '*.$DOMAINNAME'
+      middlewares:
+        - authelia@docker
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+  file:
+    filename: "./dynamic-config.yml"
+    watch: true
+
+certificatesResolvers:
+  cloudflare:
+    acme:
+      caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      storage: acme/acme.json
+      email: $CF_API_EMAIL
+      dnsChallenge: true

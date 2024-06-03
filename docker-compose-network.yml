@@ -1,0 +1,169 @@
+networks:
+  # This gets shared to the *arr stack
+  # You will need to use this network for each 
+  # container you add to traefik using compose labels
+  traefik_network:
+    driver: bridge
+    name: traefik_network
+    external: false
+    
+services:
+  authelia:
+    image: authelia/authelia
+    container_name: authelia
+    volumes:
+      - ${CONFIGDIR}/authelia:/config
+      # - ${LOGSDIR}/authelia:/authelialogs # Couldn't get to work right
+      # Logs are in /config/authelia/authelia.log
+    networks:
+      - traefik_network
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.authelia.rule=Host(`authelia.${DOMAINNAME}`)'
+      - 'traefik.http.routers.authelia.entrypoints=https'
+      - 'traefik.http.routers.authelia.tls=true'
+      - 'traefik.http.routers.authelia.tls.options=default'
+      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:${AUTHELIA_PORT}/api/authz/forward-auth'
+      - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
+      - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'  
+    ports:
+      - ${AUTHELIA_PORT}:9091
+    restart: unless-stopped
+    # healthcheck:
+    #   ## In production the healthcheck section should be commented.
+    #   disable: true
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+
+  cloudflare-ddns:
+    container_name: cloudflare-ddns
+    image: oznu/cloudflare-ddns:latest
+    restart: always
+    environment:
+      - TZ=${TZ}
+      - CF_API_EMAIL=${CF_API_EMAIL}
+      - CF_API_KEY=${CF_API_KEY}
+      - ZONE=${DOMAINNAME}
+      - SUBDOMAIN=*
+      - PROXIED=true
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    command:
+      # Traefik Config
+      - "--api"
+      - '--global.sendAnonymousUsage=false'
+      - '--global.checkNewVersion=false'
+      # Entrypoints Config
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.https.address=:443"
+      - "--entrypoints.http.redirections.entrypoint.to=https"
+      - "--entrypoints.http.redirections.entrypoint.scheme=https"
+      ## - "--entrypoints.forwardedHeaders.insecure"
+      # Logging
+      - '--log=true'
+      - '--log.level=DEBUG'
+      - '--log.filepath=/logs/traefik/traefik.log'
+      # Certificate Resolvers
+      - --certificatesresolvers.cloudflare.acme.dnsChallenge=true
+      - --certificatesresolvers.cloudflare.acme.dnsChallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.email=arcticgentoo@gmail.com
+      - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
+      - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+    labels:
+      - "traefik.enable=true"
+      - 'traefik.http.routers.api.rule=Host(`traefik.${DOMAINNAME}`) || Host(`localhost`)'
+      - "traefik.http.routers.api.service=api@internal" # Enable API as a service
+      - "traefik.http.routers.api.entrypoints=https"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.tls.options=default"
+      - "traefik.http.routers.api.middlewares=authelia@docker"
+      - "traefik.http.routers.traefik.tls.domains[1].main=${DOMAINNAME}"
+      - "traefik.http.routers.traefik.tls.domains[1].sans=*.${DOMAINNAME}"
+    ports: # Expose port 80 (HTTP) and 443 (HTTPS)
+      - "${TRAEFIK_PORT_HTTP}:80"
+      - "${TRAEFIK_PORT_HTTPS}:443"
+    volumes:
+      - ${LOGSDIR}/traefik:/traefik_logs
+      # Docker socket, needed for automatic label application
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Certs dir
+      - ${CF_CERTS_DIR}:/certs:ro
+      - ${CF_CERTS_DIR}:/cloudflare/:ro        
+      - ./certificates.yaml:/certificates.yaml;ro
+      - acme:/acme
+      # Dynamic config
+      - ${CONFIGDIR}/traefik/dynamic-config.yml:/dynamic-config.yml
+      - ${CONFIGDIR}/traefik/traefik.yml:/traefik.yml
+      
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    networks:
+      - traefik_network
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    ports:
+      - ${HOMEPAGE_PORT}:3000
+    volumes:
+      - ${CONFIGDIR}/homepage:/app/config # Make sure your local config directory exists
+      - ${LOGSDIR}/homepage:/app/config/logs # Make sure your local config directory exists
+      - /var/run/docker.sock:/var/run/docker.sock:ro # optional, for docker integrations
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - 'traefik.http.routers.homepage.rule=Host(`${DOMAINNAME}`) || Host(`homepage.${DOMAINNAME}`)'
+      - "traefik.http.routers.homepage.entrypoints=https"
+      - "traefik.http.services.homepage.loadbalancer.server.port=3000"
+      - "traefik.http.services.homepage.loadbalancer.server.scheme=http"
+
+  adguardhome:
+    image: adguard/adguardhome
+    container_name: adguardhome
+    volumes:
+      - ${CONFIGDIR}/adguardhome/conf:/opt/adguardhome/conf
+      - ${CONFIGDIR}/adguardhome/work:/opt/adguardhome/work
+    ports:
+      # WebUI
+      - "${ADGUARD_PORT}:3000"
+      # DNS
+      # - "${ADGUARD_DNS_PORT}:53"
+      # # DHCP server
+      # - 67:67/udp
+      # - 68:68/udp
+      # # HTTPS/DNS-over-HTTPS
+      # - 443:443/tcp
+      # # DNS-over-TLS
+      # - 853:853/tcp
+      # # DNS-over-QUIC
+      # - 853:853/udp
+      # # DNSCrypt
+      # - 5443:5443/tcp
+      # - 5443:5443/udp
+    networks:
+      - traefik_network
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adguardhome.entrypoints=https"
+      - "traefik.http.routers.adguardhome.rule=Host(`adguard.${DOMAINNAME}`)"
+      - "traefik.http.services.adguardhome.loadbalancer.server.port=3000"
+
+volumes:
+  acme:
