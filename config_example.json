@@ -1,19 +1,12 @@
 {
   "routes":[
-    ["primary", "https://192.168.1.101/", true, "intermediate"],
-    ["secondary", "http://192.168.1.201/", false, "intermediate"],
-    ["tertiary", "https://192.168.1.27/", true, "modern"]
   ],
-  "descriptions":{
-    "primary":"Primary Server (ESXi)",
-    "secondary":"Secondary Server (Unraid)",
-    "tertiary":"Tertiary Server (Unraid)"
-  },
   "layout":{
-    "Players": {
+    "Media": {
       "Jellyfin": "jellyfin",
       "Kavita": "kavita",
-      "Navidrome": "navidrome"
+      "Navidrome": "navidrome",
+      "AudoBookshelf": "audiobookshelf"
     },
     "Requesters": {
       "Jellyseerr": "jellyseerr",
@@ -37,17 +30,16 @@
     "Services": {
       "HomeAssistant": "homeassistant",
       "AdGuard": "adguard",
-      "IT-Tools": "it-tools"
+      "IT-Tools": "it-tools",
+      "VaultWarden": "vaultwarden",
+      "Guacamole":"guacamole",
+      "Homepage":"homepage"
     },
     "Admin": {
       "Traefik Dashboard": "traefik",
+      "Authelia": "authelia",
       "Portainer": "portainer",
-      "WhatsUp": "whatsup"
-    },
-    "Servers": {
-      "Primary": "primary",
-      "Secondary": "secondary",
-      "Tertiary": "tertiary"
+      "WhatsUpDocker": "whatsup"
     }
   }
 }
