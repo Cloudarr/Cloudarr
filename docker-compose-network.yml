@@ -1,48 +1,112 @@
 networks:
-  # This gets shared to the *arr stack
+  # This gets shared to the other stacks
   # You will need to use this network for each 
   # container you add to traefik using compose labels
+  # To do so, copy the below network section to another
+  # compose file's network section and set external: true
   traefik_network:
     driver: bridge
     name: traefik_network
     external: false
-    
+
 services:
   authelia:
     image: authelia/authelia
     container_name: authelia
     volumes:
       - ${CONFIGDIR}/authelia:/config
-      # - ${LOGSDIR}/authelia:/authelialogs # Couldn't get to work right
-      # Logs are in /config/authelia/authelia.log
     networks:
-      - traefik_network
+      traefik_network: {}
     labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.authelia.rule=Host(`authelia.${DOMAINNAME}`)'
+      - 'traefik.enable=true'   
+      - 'traefik.http.routers.authelia.rule=Host(`authelia.${DOMAINNAME}`) || Host(`auth.${DOMAINNAME}`)'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
       - 'traefik.http.routers.authelia.tls.options=default'
       - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:${AUTHELIA_PORT}/api/authz/forward-auth'
       - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
-      - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'  
+      - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User, Remote-Groups, Remote-Name, Remote-Email'  
     ports:
       - ${AUTHELIA_PORT}:9091
     restart: unless-stopped
-    # healthcheck:
-    #   ## In production the healthcheck section should be commented.
-    #   disable: true
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
+      - X_AUTHELIA_CONFIG_FILTERS=template
+  openldap:
+    image: osixia/openldap:latest
+    container_name: openldap
+    hostname: openldap
+    volumes:
+      - ${CONFIGDIR}/openldap/ldap/db:/var/lib/ldap
+      - ${CONFIGDIR}/openldap/ldap/conf:/etc/ldap/slapd.d
+    networks:
+      - traefik_network
+    ports:
+      - ${OPENLDAP_PORT}:${OPENLDAP_PORT}
+      - ${OPENLDAP_LDAPS_PORT}:${OPENLDAP_LDAPS_PORT}
+    restart: unless-stopped
+    environment:
+      TZ: $TZ
+      LDAP_ORGANISATION: ${LDAP_ORGANISATION}
+      LDAP_DOMAIN: "${DOMAINNAME}"
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LDAP_CONFIG_PASSWORD: ${LDAP_CONFIG_PASSWORD}
+      LDAP_TLS_VERIFY_CLIENT: ${LDAP_TLS_VERIFY_CLIENT}
+      LDAP_READONLY_USER: ${LDAP_READONLY_USER}
+      LDAP_READONLY_USER_USERNAME: ${LDAP_READONLY_USER_USERNAME}
+      LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_USER_PASSWORD}
+      LDAP_RFC2307BIS_SCHEMA: ${LDAP_RFC2307BIS_SCHEMA}
+      LDAP_BACKEND: ${LDAP_BACKEND}
+      LDAP_REPLICATION: ${LDAP_REPLICATION}
+      KEEP_EXISTING_CONFIG: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: ${LDAP_REMOVE_CONFIG_AFTER_SETUP}
+      LDAP_PORT_NUMBER: ${OPENLDAP_PORT}
+      LDAP_LDAPS_PORT_NUMBER: ${OPENLDAP_LDAPS_PORT}
+
+  ldap-user-manager:
+    image: wheelybird/ldap-user-manager:v1.9
+    container_name: ldap-user-manager
+    networks:
+      - traefik_network
+    ports:
+      - ${LDAP_USER_MANAGER_PORT}:80
+    restart: always
+    depends_on:
+      - openldap
+    environment:
+      TZ: $TZ
+      SERVER_HOSTNAME: "ldap-user-manager.${DOMAINNAME}"
+      ORGANISATION_NAME: ${LDAP_ORGANISATION}
+      LDAP_URI: "ldap://openldap:${OPENLDAP_PORT}"
+      LDAP_BASE_DN: "${LDAP_BASE_DN}" # edit domain tld same as above 
+      LDAP_ADMINS_GROUP: "admins" # admin group
+      LDAP_ADMIN_BIND_DN: "cn=admin,${LDAP_BASE_DN}" # edit domain tld
+      LDAP_ADMIN_BIND_PWD: ${LDAP_ADMIN_PASSWORD} # admin password set above 
+      LDAP_DEBUG: "true"
+      # LDAP_USES_NIS_SCHEMA: "false"
+      LDAP_IGNORE_CERT_ERRORS: "true"
+      LDAP_REQUIRE_STARTTLS: "false"
+      EMAIL_DOMAIN: "@${DOMAINNAME}" # email @this.part.here
+      NO_HTTPS: "true"
+      ACCEPT_WEAK_PASSWORDS : "true"
+      EMAIL_FROM_ADDRESS: "admin@${DOMAINNAME}" # your email address
+      # REMOTE_HTTP_HEADERS_LOGIN: "TRUE"
+    labels:
+      - "traefik.enable=true"
+      - 'traefik.http.routers.ldap-user-manager.rule=Host(`ldap-user-manager.${DOMAINNAME}`) || Host(`admin.${DOMAINNAME}`)'
+      - "traefik.http.routers.ldap-user-manager.entrypoints=https"
+      - "traefik.http.services.ldap-user-manager.loadbalancer.server.port=80"
+      - "traefik.http.services.ldap-user-manager.loadbalancer.server.scheme=http"
 
   cloudflare-ddns:
     container_name: cloudflare-ddns
     image: oznu/cloudflare-ddns:latest
     restart: always
+    networks:
+      - traefik_network
     environment:
-      - TZ=${TZ}
+      - TZ=$TZ
       - CF_API_EMAIL=${CF_API_EMAIL}
       - CF_API_KEY=${CF_API_KEY}
       - ZONE=${DOMAINNAME}
@@ -53,12 +117,12 @@ services:
     image: traefik:latest
     container_name: traefik
     networks:
-      - traefik_network
+      traefik_network:
+        aliases:
+          - '${AUTHELIA_PREFIX}.${DOMAINNAME}'
     restart: unless-stopped
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
     command:
       # Traefik Config
       - "--api"
@@ -74,15 +138,15 @@ services:
       - '--log=true'
       - '--log.level=DEBUG'
       - '--log.filepath=/logs/traefik/traefik.log'
-      # Certificate Resolvers
-      - --certificatesresolvers.cloudflare.acme.dnsChallenge=true
-      - --certificatesresolvers.cloudflare.acme.dnsChallenge.provider=cloudflare
-      - --certificatesresolvers.cloudflare.acme.email=arcticgentoo@gmail.com
-      - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
-      - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      # # Certificate Resolvers (Edit in cloudarr-config.yml)
+      # - --certificatesresolvers.cloudflare.acme.dnsChallenge=true
+      # - --certificatesresolvers.cloudflare.acme.dnsChallenge.provider=cloudflare
+      # - --certificatesresolvers.cloudflare.acme.email=$CF_API_EMAIL
+      # - --certificatesresolvers.cloudflare.acme.storage=acme/acme.json
+      # - --certificatesresolvers.cloudflare.acme.caserver=$CF_CA_SERVER
     labels:
       - "traefik.enable=true"
-      - 'traefik.http.routers.api.rule=Host(`traefik.${DOMAINNAME}`) || Host(`localhost`)'
+      - 'traefik.http.routers.api.rule=Host(`traefik.${DOMAINNAME}`)'
       - "traefik.http.routers.api.service=api@internal" # Enable API as a service
       - "traefik.http.routers.api.entrypoints=https"
       - "traefik.http.routers.api.tls=true"
@@ -109,18 +173,18 @@ services:
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
+    user: root
     networks:
       - traefik_network
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
     ports:
       - ${HOMEPAGE_PORT}:3000
     volumes:
       - ${CONFIGDIR}/homepage:/app/config # Make sure your local config directory exists
       - ${LOGSDIR}/homepage:/app/config/logs # Make sure your local config directory exists
-      - /var/run/docker.sock:/var/run/docker.sock:ro # optional, for docker integrations
+      - ${CONFIGDIR}/homepage/images:/app/public/images
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -129,17 +193,19 @@ services:
       - "traefik.http.services.homepage.loadbalancer.server.port=3000"
       - "traefik.http.services.homepage.loadbalancer.server.scheme=http"
 
-  adguardhome:
+  adguard:
     image: adguard/adguardhome
-    container_name: adguardhome
+    container_name: adguard
     volumes:
       - ${CONFIGDIR}/adguardhome/conf:/opt/adguardhome/conf
       - ${CONFIGDIR}/adguardhome/work:/opt/adguardhome/work
     ports:
-      # WebUI
-      - "${ADGUARD_PORT}:3000"
+      # WebUI (setup)
+      - "${ADGUARD_SETUP_PORT}:3000"
+      # WebUI (deployed)
+      - "${ADGUARD_DEPLOYED_PORT}:80"
       # DNS
-      # - "${ADGUARD_DNS_PORT}:53"
+      - "${ADGUARD_DNS_PORT}:53"
       # # DHCP server
       # - 67:67/udp
       # - 68:68/udp
@@ -155,15 +221,13 @@ services:
     networks:
       - traefik_network
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.adguardhome.entrypoints=https"
       - "traefik.http.routers.adguardhome.rule=Host(`adguard.${DOMAINNAME}`)"
-      - "traefik.http.services.adguardhome.loadbalancer.server.port=3000"
+      - "traefik.http.services.adguardhome.loadbalancer.server.port=80"
 
-volumes:
+volumes: # Prevents common permissions issue with acme dir
   acme:

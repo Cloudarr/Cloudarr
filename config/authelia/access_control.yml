@@ -1,5 +1,0 @@
-access_control:
-  rules:
-    # Add custom ac rules here
-    # - domain: home.domain.local
-    #   policy: one_factor

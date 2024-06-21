@@ -1,0 +1,693 @@
+################################################################
+#####
+#    ##  #        ####   #    #  #####     ##    #####   #####
+#        #       #    #  #    #  #    #   #  #   #    #  #    #
+#        #       #    #  #    #  #    #  #    #  #    #  #    #
+#    ##  #       #    #  #    #  #    #  ######  #####   #####
+#    #   #       #    #  #    #  #    #  #    #  #   #   #   #
+#####   ######   ####    ####   #####   #    #  #    #  #    #
+################################################################
+
+# CHANGES TO THIS FILE WILL NOT TAKE EFFECT UNTIL YOU RUN
+# `sudo python3 apply_config.py`
+
+# Cloudar's config system is a simplified combination of Traefik's
+# dynamic-config.yml, Authelia's configuration.yml
+# and Homepage's services.yml and settings.yml
+
+# Some changes, like those affecting Homepage or Traefik's
+# dynamic-config.yml will take effect immediately
+# Changes that affect traefik.yml or Authelia's configuration.yml
+# will not take effect until their respective container is restarted
+
+# Cloudarr's Traefik/Authelia containers have been pre-configured
+# to route http and https addresses automatically, pre-defined
+# TLS configurations have been created to support both new and
+# old local machines.
+#
+# There are several major fields in cloudar-config.yml:
+# - FIELD             AFFECTED FILE(S)            TAKES EFFECT
+# - homepage          homepage/services.yml       immediately after applied
+#                     homepage/settings.yml       immediately after applied
+#
+# - traefik           traefik/traefik.yml         after Traefik container restart
+#
+# - traefik-dynamic   traefik/dynamic-config.yml  immediately after applied
+#
+# - services          all above files             varies, see above
+#
+# - authelia          authelia/configuration.yml  after Authelia container restart
+
+# Homepage settings are basically 1:1 with gethomepage settings
+# The only change is layout items now have a "config" field where
+# the normal keys move to, and an "items" field which is a list of
+# prefixes configued in the "services" section of cloudarr-config below
+# See gethomepage settings for more info on gethomepage settings
+# https://gethomepage.dev/latest/configs/settings
+homepage:
+  title: $HOMEPAGE_TITLE
+  theme: $CLOUDARR_THEME
+  headerStyle: $HOMEPAGE_HEADER_STYLE
+  background:
+    # Built in electro-sphere background
+    # You can add files to $CONFIGDIR/homepage/images and update
+    # This field to add different backgrounds
+    image: /images/background_sphere.gif 
+    blur: sm # sm, "", md, xl... see https://tailwindcss.com/docs/backdrop-blur
+    saturate: 50 # 0, 50, 100... see https://tailwindcss.com/docs/backdrop-saturate
+    brightness: 75 # 0, 50, 75... see https://tailwindcss.com/docs/backdrop-brightness
+    opacity: 80 # 0-100
+
+  layout:
+    # Gethomepage Category:
+    #   - prefix_1
+    #   - prefix_2
+    #   - prefix_3
+    # Gethomepage Category 2:
+    #   - prefix_4
+
+    - Status:
+      config:
+        style: row
+        columns: 3
+        useEqualHeights: true
+      items:
+        - traefik
+        - portainer
+        - whatsupdocker
+
+    - Services:
+      config:
+        style: row
+        columns: 3
+        useEqualHeights: true
+      items:
+        - guacamole
+        - homeassistant
+        - adguard
+        - it-tools
+        - vaultwarden
+        - qbittorrent
+        - jackett
+        - nzbhydra
+        - filebrowser
+        - filebot
+        - picard
+
+    - Media:
+      config:
+        style: row
+        columns: 4
+        useEqualHeights: true
+      items:
+        - jellyfin
+        - kavita
+        - navidrome
+        - audiobookshelf
+
+    - Requesters:
+      config:
+        style: row
+        columns: 3
+        useEqualHeights: true
+      items:
+        - jellyseerr
+        - readarr
+        - lidarr
+
+    - More Requesters:
+      config:
+        useEqualHeights: true
+        header: false
+        style: row
+        columns: 3
+      items:
+        - sonarr
+        - radarr
+        - bazarr
+
+    - Other Requesters:
+      config:
+        useEqualHeights: true
+        header: False
+        style: row
+        columns: 1
+      items:
+        - youtubedl
+
+    - Other:
+      items:
+        - authelia
+        - homepage
+
+    - Servers:
+      items:
+        - primary
+        - secondary
+        - tertiary
+        - filesafe
+        - bigbackup
+
+    - Andrew:
+      items:
+        - filesafe-browser
+        - bignas-browser
+        - bigbackup-browser
+        - secondary-browser
+      
+    - Angel's Services:
+      items:
+        - angels-router
+        - angels-esxi
+  
+
+# Traefik.yml static config
+# See https://doc.traefik.io/traefik/getting-started/configuration-overview/
+traefik:
+  log:
+    level: DEBUG
+    filepath: "traefik_logs/traefik.log"
+
+  api:
+    insecure: false
+    dashboard: true
+
+  entryPoints:
+    http:
+      address: ":80"
+
+    https:
+      address: ":443"
+      http:
+        tls:
+          certResolver: cloudflare
+          domains:
+            - main: $DOMAINNAME
+                sans:'*.$DOMAINNAME'
+        middlewares:
+          - authelia@docker
+
+  providers:
+    docker:
+      endpoint: "unix:///var/run/docker.sock"
+      exposedByDefault: false
+    file:
+      filename: "./dynamic-config.yml"
+      watch: true
+
+  certificatesResolvers:
+    cloudflare:
+      acme:
+        caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+        storage: acme/acme.json
+        email: $CF_API_EMAIL
+        dnsChallenge: true
+
+# Traefik dynamic-config.yml
+# See https://doc.traefik.io/traefik/getting-started/configuration-overview/
+# CLOUDARR ROUTES ARE DEFINED IN THE services SECTION BELOW OR IN THE COMPOSE FILE
+# ADDING ROUTES HERE WILL BREAK CLOUDARR's apply_config.py
+traefik-dynamic:
+  tls:
+    options:
+      modern:
+        minVersion: "VersionTLS13"     
+      intermediate:
+        minVersion: "VersionTLS12"
+        cipherSuites:
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+      old:
+        minVersion: "TLSv1"
+        cipherSuites: 
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+          - "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+          - "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+          - "TLS_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_RSA_WITH_AES_128_CBC_SHA256"
+          - "TLS_RSA_WITH_AES_128_CBC_SHA"
+          - "TLS_RSA_WITH_AES_256_CBC_SHA"
+          - "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+
+  http:
+    middlewares:
+      # Security headers
+      securityHeaders:
+        headers:
+          customResponseHeaders:
+            X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex"
+            X-Forwarded-Proto: "https"
+            server: ""
+          customRequestHeaders:
+            X-Forwarded-Proto: "https"
+          sslProxyHeaders:
+            X-Forwarded-Proto: "https"
+          referrerPolicy: "same-origin"
+          hostsProxyHeaders:
+            - "X-Forwarded-Host"
+          contentTypeNosniff: true
+          browserXssFilter: true
+          forceSTSHeader: true
+          stsIncludeSubdomains: true
+          stsSeconds: 63072000
+          stsPreload: true
+    ## TRANSPORTS ##
+    serversTransports:
+      
+      insecureTransport: # Used to ignore inscure local servers.
+        # This can be used to proxy old devices that aren't being updated any more.
+        # Examples include routers, server remote access cards, etc. 
+        # You won't need to ever use this with a docker container
+        # If you change the name of this transport you will break cloudarr http support
+        insecureSkipVerify: true
+
+
+
+# Authlia configuration
+# See https://www.authelia.com/configuration/prologue/introduction/
+authelia:
+  theme: $CLOUDARR_THEME
+  log:
+    level: 'debug'
+    format: 'text'
+    file_path: '/config/authelia.log'
+    keep_stdout: false
+  authentication_backend:
+    ldap:
+      attributes:
+        group_name: cn
+      implementation: custom
+      address: ldap://openldap
+      start_tls: false
+
+      tls:
+        # TODO: Automate this
+        ## Server Name for certificate validation (in case it's not set correctly in the URL).
+        # server_name: ldap.example.com
+
+        ## Skip verifying the server certificate (to allow a self-signed certificate).
+        ## In preference to setting this we strongly recommend you add the public portion of the certificate to the
+        ## certificates directory which is defined by the `certificates_directory` option at the top of the config.
+        skip_verify: true
+
+        ## Minimum TLS version for either Secure LDAP or LDAP StartTLS.
+        minimum_version: TLS1.2
+
+      base_dn: $LDAP_BASE_DN
+      additional_users_dn: ou=people
+      users_filter: (&({username_attribute}={input})(objectClass=person))
+      additional_groups_dn: ou=groups
+      groups_filter: (&(uniquemember={dn})(objectclass=groupOfUniqueNames))
+      user: cn=admin,$LDAP_BASE_DN
+      password: $LDAP_ADMIN_PASSWORD
+      
+  server:
+    address: 'tcp://:$AUTHELIA_PORT'
+    endpoints:
+      authz:
+        forward-auth:
+          implementation: "ForwardAuth"
+    buffers:
+      read: 4096
+      write: 4096
+
+  totp:
+    issuer: 'authelia.com'
+
+  identity_validation:
+    reset_password:
+      jwt_secret: '$AUTHELIA_JWT_SECRET'
+
+  session:
+    secret: '$AUTHELIA_SESSION_SECRET'
+
+    cookies:
+      - name: 'authelia_session' # Don't change this
+        domain: '$DOMAINNAME'  # Should match whatever your root protected domain is
+        authelia_url: 'https://$AUTHELIA_PREFIX.$DOMAINNAME/'
+        expiration: '$AUTHELIA_SESSION_COOKIE_EXPIRATION'
+        inactivity: '$AUTHELIA_SESSION_COOKIE_INACTIVITY'
+        default_redirection_url: 'https://$AUTHELIA_DEFAULT_REDIRECT_URL_PREFIX.$DOMAINNAME/'
+        
+  regulation:
+    max_retries: $AUTHELIA_MAX_RETRIES
+    find_time: '$AUTHELIA_FIND_TIME'
+    ban_time: '$AUTHELIA_BAN_TIME'
+    
+  storage:
+    encryption_key: '$AUTHELIA_STORAGE_ENCRYPTION_KEY'
+    local:
+      path: '/config/db.sqlite3'
+
+  notifier:
+    filesystem:
+      filename: '/config/notification.txt'
+
+  # You can modify this to set per-route access levels
+  access_control:
+    default_policy: 'one_factor'
+    # networks: # per-network policy settings
+    # - name: 'internal'
+    #   networks:
+    #   - '192.168.1.0/24'
+
+    rules:
+      # Bypass Authelia to prevent redirect loop
+      - domain: $AUTHELIA_PREFIX.$DOMAINNAME
+        policy: bypass
+
+      # Bypass VaultWarden API (Otherwise the app doesn't work)
+      - domain: $VW_PREFIX.$DOMAINNAME
+        resources:
+          - '^/api([/?].*)?$'
+          - '^/notification([/?].*)?$'
+          - '^/accounts/login([/?].*)?$'
+          - '^/identity([/?].*)?$'
+        policy: bypass
+
+      # Bypass Subsonic API (Otherwise app don't work)
+      - domain: music.$DOMAINNAME
+        resources:
+          - '^/rest([/?].*)?$'
+        policy: bypass
+
+
+# services:
+#   # - prefix, eg prefix.domain.com
+#   # If this config is for a docker container use the container name
+#   # This will not affect the Traefik compose label system
+#
+#   - portainer: # portainer.example.com
+#
+#     # OPTIONAL | Gethomepage button name
+#     name: Portainer
+#
+#     # OPTIONAL | Gethomepage button description
+#     description: Docker Container Manager
+#
+#     # OPTIONAL | Associated Docker container if applicable
+#     container: portainer
+#
+#     # OPTIONAL | Gethomepage icon
+#     # Configures a route's icon on the home page.
+#     # Defaults to the prefix if not set. Icon details found here:
+#     # https://gethomepage.dev/latest/configs/services/#icons
+#     icon: portainer
+#
+#     widget: # OPTIONAL | Gethomepage widget
+#       # See https://gethomepage.dev/latest/widgets/ for widget info
+#       # Keys vary based on the specific widget
+#       # They are passed 1:1 to Homepage's services.yml
+#       # 'type' and 'url' are mandatory for all widgets
+#       type: portainer
+#       url: http://portainer:9000
+#       env: 1
+#       key: $PORTAINER_API_KEY
+# 
+#   # Local host example, no widget but with Traefik route
+#   - primary: # primary.example.com, host on the local network
+#       name: Primary
+#       # REQUIRED FOR LOCAL | Static IP Recommended, DNS name strongly discouraged
+#       # Will automatically configure http/https appropriately
+#       route: http://192.168.1.101/
+#       description: Primary Server (ESXi)
+#       icon: vmware-esxi
+#
+#   - secondary: # secondary.example.com, another host on the local network
+#       name: Secondary
+#       route: https://192.168.1.201/
+#       description: Secondary Server (Unraid)
+#       icon: unraid
+#       tls: modern
+
+services:
+  #### Built-in routes
+  jackett:
+    name: Jackett
+    description: Torrent Indexer
+    container: jackett
+    icon: jackett
+
+  nzbhydra:
+    name: Nzbhydra
+    description: Torrent Indexer
+    container: nzbhydra
+    icon: nzbhydra
+
+  filebot:
+    name: FileBot
+    description: Video File Manager
+    container: filebot
+
+  picard:
+    name: MusicBrainz Picard
+    description: Music File and Metadata Manager
+    container: picard
+
+  authelia:
+    name: Authelia
+    description: Authentication Service
+    container: authelia
+
+  homepage:
+    name: Homepage
+    description: Consolidated Home Page
+    container: homepage
+
+  traefik:
+    name: Traefik
+    description: Traefik Dashboard
+    container: traefik
+    icon: traefik
+    widget:
+      type: traefik
+      url: http://traefik:8080
+
+  portainer:
+    name: portainer
+    description: Docker Container Manager
+    container: portainer
+    icon: portainer
+    widget:
+      type: portainer
+      url: http://portainer:9000
+      env: 1
+      key: $PORTAINER_API_KEY
+
+  whatsupdocker:
+    name: WhatsUpDocker
+    description: Docker Container Update Manager
+    container: whatsupdocker
+    icon: wud
+    widget:
+      type: whatsupdocker
+      url: http://whatsupdocker:3003
+
+  jellyfin:
+    name: Jellyfin
+    description: Video/Music Player
+    container: jellyfin
+    icon: jellyfin
+    widget:
+      type: jellyfin
+      url: http://jellyfin:8096
+      key: $JELLYFIN_API_KEY
+
+  kavita:
+    name: Kavita
+    description: Ebook Reader
+    container: kavita
+    icon: kavita
+    widget:
+      type: kavita
+      url: http://kavita:5000
+      username: $KAVITA_USERNAME
+      password: $KAVITA_PASSWORD
+
+  navidrome:
+    name: Navidrome
+    description: Music Player / Server
+    container: navidrome
+    icon: navidrome
+    widget:
+      type: navidrome
+      user: http://navidrome:4533
+      url: $NAVIDROME_USERNAME
+      token: $NAVIDROME_TOKEN
+      salt: $NAVIDROME_SALT
+
+  audiobookshelf:
+    name: AudioBookshelf
+    description: None
+    container: audiobookshelf
+    icon: audiobookshelf
+    widget:
+      type: audiobookshelf
+      url: http://audiobookshelf:80
+      key: $AUDIOBOOKSHELF_API_KEY
+
+  jellyseerr:
+    name: Jellyseerr
+    description: Show and Movie Requester
+    container: jellyseerr
+    icon: jellyseerr
+    widget:
+      type: jellyseerr
+      url: http://expressvpn:5055
+      key: $JELLYSEERR_API_KEY
+
+  readarr:
+    name: Readarr
+    description: Book Requester
+    container: readarr
+    icon: readarr
+    widget:
+      type: readarr
+      url: http://expressvpn:8787
+      key: $READARR_API_KEY
+
+  lidarr:
+    name: Lidarr
+    description: Music Requester
+    container: lidarr
+    icon: lidarr
+    widget:
+      type: lidarr
+      url: http://expressvpn:8686
+      key: $LIDARR_API_KEY
+
+  sonarr:
+    name: Sonarr
+    description: Show Requester
+    container: sonarr
+    icon: sonarr
+    widget:
+      type: sonarr
+      url: http://expressvpn:8989
+      key: $SONARR_API_KEY
+
+  radarr:
+    name: Radarr
+    description: Movie Requester
+    container: radarr
+    icon: radarr
+    widget:
+      type: radarr
+      url: http://expressvpn:7878
+      key: $RADARR_API_KEY
+
+  bazarr:
+    name: Bazarr
+    description: Subtitle Requester
+    container: bazarr
+    icon: bazarr
+    widget:
+      type: bazarr
+      url: http://expressvpn:6767
+      key: $BAZARR_API_KEY
+
+  youtubedl:
+    name: YouTube-DL
+    description: YouTube Requester
+    container: youtubedl
+    icon: youtubedl
+
+  guacamole:
+    name: Guacamole
+    description: Remote Desktop Web UI
+    container: guacamole
+    icon: guacamole
+
+  homeassistant:
+    name: HomeAssistant
+    description: Home Automation Service
+    container: homeassistant
+    icon: home-assistant
+
+  adguard:
+    name: AdGuard
+    description: Home AD Blocking DNS
+    container: adguard
+    icon: adguard-home
+    widget:
+      type: adguard
+      url: http://adguard:80
+      username: $ADGUARD_USERNAME
+      password: $ADGUARD_PASSWORD
+
+  it-tools:
+    name: IT-Tools
+    description: IT/Developer Toolbox
+    container: it-tools
+    icon: it-tools
+
+  vaultwarden:
+    name: VaultWarden
+    description: Password Manager
+    container: vaultwarden
+    icon: vaultwarden
+
+  filebrowser:
+    name: Media File Browser
+    description: Consolidated Media File Browser
+    container: filebrowser
+    icon: filebrowser
+
+  qbittorrent:
+    name: Qbittorrent
+    description: Torrent Downloader
+    container: qbittorrent
+    icon: qbittorrent
+    widget:
+      type: qbittorrent
+      url: http://expressvpn:3005
+      username: $QBITTORRENT_USERNAME
+      password: $QBITTORRENT_PASSWORD
+  #### End Built-in routes
+
+  #### Local routes
+  # example:
+  #     name: Example route
+  #     route: http://192.168.1.0/
+  #     description: Example
+  #     icon: example
+
+  # angels-router:
+  #   name: Angel's Router
+  #   route: http://192.168.1.13/
+  #   description: Angel's Router (OPNSense)
+  #   icon: opnsense
+
+  # angels-esxi:
+  #   name: Angel's ESXi
+  #   route: https://192.168.1.13/
+  #   description: Angel's ESXi (ESXi)
+  #   icon: vmware-esxi
+
+  # primary:
+  #   name: Primary
+  #   route: https://192.168.1.101/
+  #   description: Primary Server (ESXi)
+  #   icon: vmware-esxi
+  #   tls: intermediate
+
+  # secondary:
+  #   name: Secondary
+  #   route: http://192.168.1.201/
+  #   description: Secondary Server (Unraid)
+  #   icon: unraid
+  #   tls: modern

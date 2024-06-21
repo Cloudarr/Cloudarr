@@ -28,40 +28,19 @@ volumes:
       o: bind
       device: '${DOWNLOADSDIR}'
 
-  tvdownloads:
+  youtubemoviedownloads:
     driver: local
     driver_opts:
       type: 'none'
       o: bind
-      device: '${TVDOWNLOADSDIR}'
+      device: '${MOVIESDIR}/other'
   
-  moviedownloads:
+  youtubemusicdownloads:
     driver: local
     driver_opts:
       type: 'none'
       o: bind
-      device: '${MOVIESDOWNLOADSDIR}'
-
-  musicdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${MUSICDOWNLOADSDIR}'
-
-  audiobookdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${AUDIOBOOKDOWNLOADSDIR}'
-
-  bookdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${BOOKDOWNLOADSDIR}'
+      device: '${MUSICDIR}/other'
 
   movies:
     driver: local
@@ -125,8 +104,8 @@ services:
       # Bittorrent port
       - ${BITTORRENT_PORT}:6881
       - ${BITTORRENT_PORT}:6881/udp
-      # Web port
-      - 8088:8080
+      # # Web port
+      # - 8088:8080
       # Jackett UI port
       - ${JACKETT_PORT}:9117
       # Sonarr port
@@ -145,6 +124,8 @@ services:
       - ${JELLYSEER_PORT}:5055
       # Unpackerr port
       - ${UNPACKERR_PORT}:5656
+      # Flaresolverr port
+      - ${FLARESOLVERR_PORT}:8191
     command: /bin/bash
     restart: unless-stopped
     labels: # Add traefik routing
@@ -162,7 +143,7 @@ services:
 
       # QBT Web UI
       traefik.http.routers.qbittorrent.entrypoints: https
-      traefik.http.routers.qbittorrent.rule: Host(`qbittorrent.${DOMAINNAME}`) || Host(`qbit.${DOMAINNAME}`)    
+      traefik.http.routers.qbittorrent.rule: "Host(`qbittorrent.${DOMAINNAME}`) || Host(`qbit.${DOMAINNAME}`)"
       traefik.http.routers.qbittorrent.service: qbittorrent
       traefik.http.services.qbittorrent.loadbalancer.server.port: 8090
       traefik.http.services.qbittorrent.loadbalancer.server.scheme: http
@@ -234,52 +215,53 @@ services:
     image: linuxserver/qbittorrent
     container_name: qbittorrent
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
-      - UMASK_SET=022
-      - WEBUI_PORT=8090
+      -PUID: 0
+      -PGID: 0
+      -TZ: $TZ
+      # - UMASK_SET=022
+      -WEBUI_PORT: 8090
     volumes:
       - ${CONFIGDIR}/qbit:/config
       - downloads:/downloads
-      - tvdownloads:/tvdownloads
-      - moviedownloads:/moviedownloads
-      - musicdownloads:/musicdownloads
-      - audiobookdownloads:/audiobookdownloads
     network_mode: service:expressvpn
     restart: unless-stopped
+    depends_on:
+      - expressvpn
 
   flaresolverr: 
     image: ghcr.io/flaresolverr/flaresolverr:latest 
     container_name: flaresolverr 
     network_mode: service:expressvpn
     environment: 
-      - LOG_LEVEL=${LOG_LEVEL:-info} 
-      - LOG_HTML=${LOG_HTML:-false} 
-      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none} 
-      - TZ=${TZ}
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info} 
+      - LOG_HTML=${FLARESOLVERR_LOG_HTML:-false} 
+      - CAPTCHA_SOLVER=${FLARESOLVERR_CAPTCHA_SOLVER:-none} 
+      - TZ=$TZ
     restart: unless-stopped
+    depends_on:
+      - expressvpn
 
   jackett:
     image: linuxserver/jackett
     container_name: jackett
     environment:
-      - TZ=${TZ}
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
     volumes:
       - ${CONFIGDIR}/jackett:/config
     restart: unless-stopped
     network_mode: service:expressvpn
     depends_on:
       - expressvpn
-      - qbittorrent
 
   nzbhydra:
     image: lscr.io/linuxserver/nzbhydra2:latest
     container_name: nzbhydra
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
     volumes:
       - ${CONFIGDIR}/nzbhydra:/config
       - ${CONFIGDIR}/nzbhydra/downloads:/downloads
@@ -292,90 +274,80 @@ services:
     image: linuxserver/lidarr:latest
     container_name: lidarr
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${CONFIGDIR}/lidarr:/config
       - music:/music
-      - musicdownloads:/downloads
+      - downloads:/downloads
     restart: unless-stopped
     network_mode: service:expressvpn
     depends_on:
-      - nzbhydra
-      - qbittorrent
+      - expressvpn
 
   radarr:
     image: linuxserver/radarr:latest
     container_name: radarr
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${CONFIGDIR}/radarr:/config
       - movies:/movies
-      - moviedownloads:/downloads
+      - downloads:/downloads
     restart: unless-stopped
     network_mode: service:expressvpn
     depends_on:
-      - nzbhydra
-      - qbittorrent
+      - expressvpn
 
   readarr:
     image: lscr.io/linuxserver/readarr:develop
     container_name: readarr
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${CONFIGDIR}/readarr:/config
       - books:/books
-      - bookdownloads:/downloads
+      - downloads:/downloads
     restart: unless-stopped
     network_mode: service:expressvpn
     depends_on:
-      - nzbhydra
-      - qbittorrent
+      - expressvpn
 
   sonarr:
     image: linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      -TZ: $TZ
+      -PUID: 1000
+      -PGID: 1000
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${CONFIGDIR}/sonarr:/config
-      - shows:/tv
-      - tvdownloads:/downloads
+      - shows:/tv:rw
+      # - anime:/anime
+      - downloads:/downloads:rw
+      # - animedownload:/animedownloads
     restart: unless-stopped
     network_mode: service:expressvpn
     depends_on:
-      - nzbhydra
-      - qbittorrent
-
+      - expressvpn
+      
   bazarr: 
     image: lscr.io/linuxserver/bazarr:latest 
     container_name: bazarr 
     environment: 
-      - PUID=1024 
-      - PGID=101 
-      - TZ=${TZ}
+      -TZ: $TZ
     volumes: 
       - ${CONFIGDIR}/bazarr:/config 
+      # - anime:/mnt/anime
       - shows:/mnt/tvshows
       - movies:/mnt/movies 
     restart: unless-stopped
     network_mode: service:expressvpn
-    depends_on: 
-      - sonarr 
-      - radarr
+    depends_on:
+      - expressvpn
 
   unpackerr:
     image: golift/unpackerr
@@ -384,18 +356,11 @@ services:
       # You need at least this one volume mapped so Unpackerr can find your files to extract.
       # Make sure this matches your Starr apps; the folder mount (/downloads or /data) should be identical.
       - downloads:/downloads
-      - tvdownloads:/tvdownloads
-      - moviedownloads:/moviedownloads
-      - musicdownloads:/musicdownloads
-      - audiobookdownloads:/audiobookdownloads
-      - bookdownloads:/bookdownloads
       - ${CONFIGDIR}/unpackerr:/config
     restart: always
     
     environment:
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ}
+      - TZ=$TZ
       # General config
       - UN_DEBUG=false
       - UN_LOG_FILE=/config/unpackerr.log
@@ -409,33 +374,33 @@ services:
       - UN_FILE_MODE=0644
       - UN_DIR_MODE=0755
       # Sonarr Config
-      - UN_SONARR_0_URL=http://0.0.0.0:${SONARR_PORT}
-      - UN_SONARR_0_API_KEY=
-      - UN_SONARR_0_PATHS_0=/tvdownloads
+      - UN_SONARR_0_URL=http://sonarr:${SONARR_PORT}
+      - UN_SONARR_0_API_KEY=${SONARR_API_KEY}
+      - UN_SONARR_0_PATHS_0=/downloads
       - UN_SONARR_0_PROTOCOLS=torrent
       - UN_SONARR_0_TIMEOUT=10s
       - UN_SONARR_0_DELETE_ORIG=false
       - UN_SONARR_0_DELETE_DELAY=5m
       # Radarr Config
-      - UN_RADARR_0_URL=http://0.0.0.0:${RADARR_PORT}
-      - UN_RADARR_0_API_KEY=
-      - UN_RADARR_0_PATHS_0=/moviedownloads
+      - UN_RADARR_0_URL=http://radarr:${RADARR_PORT}
+      - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
+      - UN_RADARR_0_PATHS_0=/downloads
       - UN_RADARR_0_PROTOCOLS=torrent
       - UN_RADARR_0_TIMEOUT=10s
       - UN_RADARR_0_DELETE_ORIG=false
       - UN_RADARR_0_DELETE_DELAY=5m
       # Lidarr Config
-      - UN_LIDARR_0_URL=http://0.0.0.0:${LIDARR_PORT}
-      - UN_LIDARR_0_API_KEY=
-      - UN_LIDARR_0_PATHS_0=/musicdownloads
+      - UN_LIDARR_0_URL=http://lidarr:${LIDARR_PORT}
+      - UN_LIDARR_0_API_KEY=${LIDARR_API_KEY}
+      - UN_LIDARR_0_PATHS_0=/downloads
       - UN_LIDARR_0_PROTOCOLS=torrent
       - UN_LIDARR_0_TIMEOUT=10s
       - UN_LIDARR_0_DELETE_ORIG=false
       - UN_LIDARR_0_DELETE_DELAY=5m
       # Readarr Config
-      - UN_READARR_0_URL=http://0.0.0.0:${READARR_PORT}
-      - UN_READARR_0_API_KEY=
-      - UN_READARR_0_PATHS_0=/bookdownloads
+      - UN_READARR_0_URL=http://readarr:${READARR_PORT}
+      - UN_READARR_0_API_KEY=${READARR_API_KEY}
+      - UN_READARR_0_PATHS_0=/downloads
       - UN_READARR_0_PROTOCOLS=torrent
       - UN_READARR_0_TIMEOUT=10s
       - UN_READARR_0_DELETE_ORIG=false
@@ -460,13 +425,13 @@ services:
       - UN_WEBHOOK_0_TEMPLATE_PATH=
       - UN_WEBHOOK_0_CONTENT_TYPE=application/json
       # Command Hook Config
-      - UN_CMDHOOK_0_COMMAND=
-      - UN_CMDHOOK_0_NAME=
-      - UN_CMDHOOK_0_TIMEOUT=10s
-      - UN_CMDHOOK_0_SILENT=false
-      - UN_CMDHOOK_0_SHELL=false
-      - UN_CMDHOOK_0_EXCLUDE_0=
-      - UN_CMDHOOK_0_EVENTS_0=0
+      # - UN_CMDHOOK_0_COMMAND=
+      # - UN_CMDHOOK_0_NAME=
+      # - UN_CMDHOOK_0_TIMEOUT=10s
+      # - UN_CMDHOOK_0_SILENT=false
+      # - UN_CMDHOOK_0_SHELL=false
+      # - UN_CMDHOOK_0_EXCLUDE_0=
+      # - UN_CMDHOOK_0_EVENTS_0=0
       # Web Server Config
       - UN_WEBSERVER_METRICS=false
       - UN_WEBSERVER_LISTEN_ADDR=0.0.0.0:${UNPACKERR_PORT}
@@ -477,26 +442,20 @@ services:
       - UN_WEBSERVER_SSL_KEY_FILE=
       - UN_WEBSERVER_URLBASE=/
       - UN_WEBSERVER_UPSTREAMS=
-    depends_on: 
-      - sonarr 
-      - radarr
-      - lidarr
-      - readarr
 
   jellyseerr: 
     image: fallenbagel/jellyseerr:latest 
     container_name: jellyseerr  
     environment: 
-      - PUID=1024
-      - PGID=101
-      - TZ=${TZ} 
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
     volumes: 
       - ${CONFIGDIR}/jellyseerr:/app/config 
     restart: unless-stopped
     network_mode: service:expressvpn
-    depends_on: 
-      - sonarr 
-      - radarr
+    depends_on:
+      - expressvpn
 
   youtubedl:
     container_name: youtubedl
@@ -507,20 +466,21 @@ services:
       -ytdl_mongodb_connection_string: 'mongodb://ytdl-mongo-db:27017'
       -ytdl_use_local_db: 'false'
       -write_ytdl_config: 'true'
-      -PUID: 1024
-      -PGID: 101
-      -TZ: ${TZ}
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
     ports:
       - "${YOUTUBEDL_PORT}:17442"
     restart: unless-stopped
     depends_on:
       - ytdl-mongo-db
+      - expressvpn
     volumes:
       - ${CONFIGDIR}/youtubedl/config:/app/appdata
       - ${CONFIGDIR}/youtubedl/subscriptions:/app/subscriptions
       - ${CONFIGDIR}/youtubedl/users:/app/users
-      - music:/app/audio
-      - movies:/app/video
+      - youtubemusicdownloads:/app/audio
+      - youtubemoviedownloads:/app/video
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.youtubedl.rule=Host(`youtubedl.${DOMAINNAME}`)"
@@ -532,9 +492,9 @@ services:
     container_name: youtubedl-mongo-db
     image: mongo:4
     environment:
-      -PUID: 1024
-      -PGID: 101
-      -TZ: ${TZ}
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
     networks:
       - traefik_network
     logging:

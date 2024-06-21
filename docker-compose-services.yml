@@ -28,41 +28,6 @@ volumes:
       o: bind
       device: '${DOWNLOADSDIR}'
 
-  tvdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${TVDOWNLOADSDIR}'
-  
-  moviedownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${MOVIESDOWNLOADSDIR}'
-
-  musicdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${MUSICDOWNLOADSDIR}'
-
-  audiobookdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${AUDIOBOOKDOWNLOADSDIR}'
-
-  bookdownloads:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: bind
-      device: '${BOOKDOWNLOADSDIR}'
-
   movies:
     driver: local
     driver_opts:
@@ -171,52 +136,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.whatsupdocker.entrypoints=https"
-      - "traefik.http.routers.whatsupdocker.rule=Host(`whatsup.${DOMAINNAME}`)"
+      - "traefik.http.routers.whatsupdocker.rule=Host(`whatsupdocker.${DOMAINNAME}`)"
       - "traefik.http.services.whatsupdocker.loadbalancer.server.port=3000"
-
-  # excalidraw:
-  #   image: kiliandeca/excalidraw
-  #   container_name: excalidraw
-  #   healthcheck:
-  #     disable: true
-  #   networks:
-  #     - traefik_network
-  #   ports:
-  #     - "${EXCALIDRAW_PORT}:80" # Default port 80, can be modified
-  #   environment:
-  #     BACKEND_V2_GET_URL: http://localhost:8080/api/v2/scenes/
-  #     BACKEND_V2_POST_URL: http://localhost:8080/api/v2/scenes/
-  #     LIBRARY_URL: https://libraries.excalidraw.com
-  #     LIBRARY_BACKEND: https://us-central1-excalidraw-room-persistence.cloudfunctions.net/libraries
-  #     SOCKET_SERVER_URL: http://localhost:${EXCALIDRAW_STORAGE_PORT}/
-  #     STORAGE_BACKEND: "http"
-  #     HTTP_STORAGE_BACKEND_URL: "http://localhost:8080/api/v2"
-  #   labels:
-  #     - "traefik.enable=true"
-  #     - "traefik.http.routers.excalidraw.entrypoints=https"
-  #     - "traefik.http.routers.excalidraw.rule=Host(`excalidraw.${DOMAINNAME}`)"
-  #     - "traefik.http.services.excalidraw.loadbalancer.server.port=80"
-  # excalidraw-storage:
-  #   image: kiliandeca/excalidraw-storage-backend
-  #   container_name: excalidraw-storage
-  #   ports:
-  #     - "${EXCALIDRAW_STORAGE_PORT}:8080"
-  #   environment:
-  #     STORAGE_URI: redis://excalidraw_redis:${EXCALIDRAW_REDIS_PORT}
-  #   networks:
-  #     - traefik_network
-  # excalidraw-room:
-  #   image: excalidraw/excalidraw-room
-  #   container_name: excalidraw-room
-  #   ports:
-  #     - "${EXCALIDRAW_ROOM_PORT}:80"
-  # excalidraw_redis:
-  #   image: redis
-  #   container_name: redis
-  #   networks:
-  #     - traefik_network
-  #   ports:
-  #     - "${EXCALIDRAW_REDIS_PORT}:6379"
 
   it-tools:
     ports:
@@ -235,7 +156,6 @@ services:
       - "traefik.http.routers.it-tools.rule=Host(`it-tools.${DOMAINNAME}`)"
       - "traefik.http.services.it-tools.loadbalancer.server.port=80"
 
-
   guacd:
     container_name: guac_guacd
     image: guacamole/guacd
@@ -247,6 +167,7 @@ services:
     volumes:
       - ${CONFIGDIR}/guacamole/guacd/drive:/drive:rw
       - ${CONFIGDIR}/guacamole/guacd/record:/record:rw
+
   postgres:
     container_name: guac_postgres
     networks:
@@ -262,8 +183,10 @@ services:
     volumes:
       - ${CONFIGDIR}/guacamole/postgress/init:/docker-entrypoint-initdb.d:z
       - ${CONFIGDIR}/guacamole/postgress/data:/var/lib/postgresql/data:Z
+  
   guacamole:
-    container_name: guac_guacamole
+    image: guacamole/guacamole
+    container_name: guacamole
     depends_on:
       - guacd
       - postgres
@@ -274,7 +197,23 @@ services:
       - POSTGRESQL_HOSTNAME=postgres
       - POSTGRESQL_PASSWORD='${GUACAMOLE_POSTGRESS_PASSWORD}'
       - POSTGRESQL_USER='${GUACAMOLE_POSTGRESS_USER}'
-    image: guacamole/guacamole
+      - LDAP_HOSTNAME=openldap
+      - LDAP_PORT=${OPENLDAP_PORT}
+      - LDAP_USER_BASE_DN=ou=people,${LDAP_BASE_DN}
+      - LDAP_GROUP_SEARCH_FILTER=CN=guacamoleusers,OU=groups,${LDAP_BASE_DN}
+      - LDAP_SEARCH_BIND_DN=cn=admin,${LDAP_BASE_DN}
+      - LDAP_SEARCH_BIND_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_USERNAME_ATTRIBUTE=uid
+      # - EXTENSION_PRIORITY=openid
+      # - OPENID_CLIENT_ID=guacamole
+      # - OPENID_SCOPE=openid profile groups email
+      # - OPENID_ISSUER=https://${AUTHELIA_PREFIX}:443.${DOMAINNAME}
+      # - OPENID_JWKS_ENDPOINT=https://${AUTHELIA_PREFIX}.${DOMAINNAME}/jwks.json
+      # - OPENID_AUTHORIZATION_ENDPOINT=https://${AUTHELIA_PREFIX}.${DOMAINNAME}/api/oidc/authorization?state=1234abcedfdhf
+      # - OPENID_REDIRECT_URI=https://guacamole.$DOMAINNAME
+      # - OPENID_USERNAME_CLAIM_TYPE=preferred_username
+      # - OPENID_GROUPS_CLAIM_TYPE=sub
+      # - OPENID_ALLOWED_CLOCK_SKEW=99999
     links:
       - guacd
     networks:
@@ -288,6 +227,8 @@ services:
       - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
     ports:
       - ${GUACAMOLE_PORT}:8080
+    volumes:
+      - ${CONFIGDIR}/authelia/keys:/certs:ro
 
   vaultwarden:
     image: vaultwarden/server:latest
@@ -301,13 +242,14 @@ services:
     # ports:
     #   - ${VAULTWARDEN_PORT}:80
     environment:
+      - TZ=${TZ}
       - LOGIN_RATELIMIT_MAX_BURST=10
       - LOGIN_RATELIMIT_SECONDS=60
       - DOMAIN=https://$VW_PREFIX.$DOMAINNAME/
       - INVITATION_ORG_NAME=x
       - INVITATION_ALLOWED=${VW_SIGNUPS_ALLOWED}
-      - ADMIN_TOKEN="${VW_ADMIN_TOKEN}"
-      - SIGNUPS_ALLOWED=true
+      - ADMIN_TOKEN=${VW_ADMIN_TOKEN}
+      - SIGNUPS_ALLOWED=false
       - EMERGENCY_ACCESS_ALLOWED=true
       - SENDS_ALLOWED=true
       - WEB_VAULT_ENABLE=true
@@ -339,6 +281,7 @@ services:
       - "traefik.http.routers.kavita.rule=Host(`read.${DOMAINNAME}`) || Host(`kavita.${DOMAINNAME}`)"
       - "traefik.http.services.kavita.loadbalancer.server.port=5000"
       - "traefik.http.routers.kavita.entrypoints=https"
+
   navidrome:
     image: deluan/navidrome:latest
     container_name: navidrome
@@ -390,33 +333,28 @@ services:
   filebrowser:
     hostname: filebrowser
     container_name: filebrowser
-    image: hurlenko/filebrowser
+    image: filebrowser/filebrowser
     ports:
-      - ${FILEBROWSER_PORT}:8080
+      - ${FILEBROWSER_PORT}:80
     volumes:
-      - "${CONFIGDIR}/filebrowser:/config"
+      - "${CONFIGDIR}/filebrowser/db:/config"
+      - "${CONFIGDIR}/filebrowser/config/config.json:/.filebrowser.json"
       - "shows:/data/shares/TV Shows"
       - "movies:/data/shares/Movies"
       - "music:/data/shares/Music"
       - "books:/data/shares/Books"
       - "audiobooks:/data/shares/Audiobooks"
-      - "tvdownloads:/data/downloads/TV Shows"
-      - "moviedownloads:/data/downloads/Movies"
-      - "musicdownloads:/data/downloads/Music"
-      - "bookdownloads:/data/downloads/Books"
-      - "audiobookdownloads:/data/downloads/Audiobooks"
+      - "downloads:/data/downloads/"
     environment:
-      -PUID: 1024
-      -PGID: 101
-      -FB_BASEURL: /filebrowser
       -TZ: ${TZ}
+
     networks:
       - traefik_network
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.filebrowser.rule=Host(`filebrowser.${DOMAINNAME}`)"
-      - "traefik.http.services.filebrowser.loadbalancer.server.port=8080"
+      - "traefik.http.services.filebrowser.loadbalancer.server.port=80"
       - "traefik.http.routers.filebrowser.entrypoints=https"
 
   jellyfin:
@@ -435,25 +373,21 @@ services:
       - ${CONFIGDIR}/jellyfin/etc:/etc/jellyfin 
       - ${CONFIGDIR}/jellyfin/var-cache:/var/cache/jellyfin 
       - ${CONFIGDIR}/jellyfin/var-lib:/var/lib/jellyfin 
-      - ${CONFIGDIR}/jellyfin/var-log:/var/log/jellyfin 
+      - ${CONFIGDIR}/jellyfin/var-log:/var/log/jellyfin
       - /etc/timezone:/etc/timezone:ro
       - "shows:/mnt/shares/TV Shows"
       - "movies:/mnt/shares/Movies"
       - "music:/mnt/shares/Music"
       - "books:/mnt/shares/Books"
       - "audiobooks:/mnt/shares/Audiobooks"
-      - "tvdownloads:/mnt/downloads/TV Shows"
-      - "moviedownloads:/mnt/downloads/Movies"
-      - "musicdownloads:/mnt/downloads/Music"
-      - "bookdownloads:/mnt/downloads/Books"
-      - "audiobookdownloads:/mnt/downloads/Audiobooks"
+      
     group_add: 
       - "109" 
     networks:
       - traefik_network
     ports:
       - ${JELLYFIN_PORT}:8096
-      - ${JELLYFIN_PORT_2}:892
+      - ${JELLYFIN_PORT_2}:8920
     devices: # This might vary based on your use case
       - "/dev/dri/renderD128:/dev/dri/renderD128"
     restart: unless-stopped
@@ -485,6 +419,30 @@ services:
       - "traefik.http.services.filebot.loadbalancer.server.port=5800"
       - "traefik.http.routers.filebot.entrypoints=https"  
 
+  rdesktop:
+    image: lscr.io/linuxserver/rdesktop:ubuntu-xfce
+    container_name: rdesktop
+    security_opt:
+      - seccomp:unconfined #optional
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=$TZ
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock #optional
+      - $CONFIGDIR/rdesktop:/config #optional
+      - ./:/config/dockerroot
+      # - /mnt/files:/mnt/files
+      # - /mnt/books:/mnt/books
+      # - /mnt/videos:/mnt/videos
+#    network_mode: host 
+    ports:
+      - $RDESKTOPPORT:3389
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128 #optional
+    shm_size: "1gb" #optional
+    restart: unless-stopped
+
   audiobookshelf:
     image: ghcr.io/advplyr/audiobookshelf:latest
     hostname: audiobookshelf
@@ -495,62 +453,36 @@ services:
       -TZ: ${TZ}
     ports:
       - ${AUDIOBOOKSHELF_PORT}:80
+    networks:
+      - traefik_network
     volumes:
       - audiobooks:/audiobooks
       - podcasts:/podcasts
       - ${CONFIGDIR}/audiobookshelf/metadata:/metadata
       - ${CONFIGDIR}/audiobookshelf:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.audiobookshelf.rule=Host(`audiobookshelf.${DOMAINNAME}`)"
+      - "traefik.http.services.audiobookshelf.loadbalancer.server.port=80"
+      - "traefik.http.routers.audiobookshelf.entrypoints=https"  
 
-
-
-
-  # reiverr: #Needs more work by devs
-  #   image: ghcr.io/aleksilassila/reiverr:latest
-  #   container_name: reiverr
-  #   networks:
-  #     - traefik_network
-  #   environment:
-  #     - PUID=1024
-  #     - PGID=101
-  #     - TZ=${TZ}
-  #   ports:
-  #     - ${REIVERR_PORT}:9494
-  #   volumes:
-  #     - ${CONFIGDIR}/reiverr:/config
-  #   restart: unless-stopped
-  #   labels:
-  #     - "traefik.enable=true"
-  #     - "traefik.http.routers.reiverr.entrypoints=https"
-  #     - "traefik.http.routers.reiverr.rule=Host(`reiverr.$DOMAINNAME`)"
-  #     - "traefik.http.services.reiverr.loadbalancer.server.port=9494"
-
-  # organizr: #Couldn't get working
-  #   container_name: organizr
-  #   hostname: organizr
-  #   image: organizr/organizr:latest
-  #   restart: unless-stopped
-  #   ports:
-  #     - ${ORGANIZR_PORT}:80
-  #   volumes:
-  #     - ${CONFIGDIR}/organizr:/config
-  #   environment:
-  #     - PUID=1024
-  #     - PGID=101
-  #     - TZ=${TZ}
-  #   networks:
-  #     - traefik_network
-  #   labels:
-  #     - "traefik.enable=true"
-  #     - "traefik.http.routers.organizr.entrypoints=https"
-  #     - "traefik.http.routers.organizr.rule=Host(`organizr.$DOMAINNAME`)"
-  #     - "traefik.http.services.organizr.loadbalancer.server.port=80"
-
-  # watchtower: # Whatsupdocker is better
-  #   image: containrrr/watchtower
-  #   container_name: watchtower
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   networks:
-  #     - traefik_network
-  #   restart: unless-stopped
-
+  organizr:
+    container_name: organizr
+    hostname: organizr
+    image: organizr/organizr:latest
+    restart: unless-stopped
+    ports:
+      - 9944:80
+    volumes:
+      - ${CONFIGDIR}/organizr:/config
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.organizr.entrypoints=https"
+      - "traefik.http.routers.organizr.rule=Host(`organizr.$DOMAINNAME`)"
+      - "traefik.http.services.organizr.loadbalancer.server.port=80"

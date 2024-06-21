@@ -1,0 +1,13 @@
+{
+    "port": 80,
+    "address": "",
+    "baseURL": "/",
+    "log": "stdout",
+    "plugin": "",
+    "scope":"/srv/",
+    "allowCommands": false,
+    "allowEdit": true,
+    "allowNew": true,
+    "commands": [ ],
+    "database": "/config/filebrowser.db"
+  }

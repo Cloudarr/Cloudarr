@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Form Generator</title>
+    <link href="https://bootswatch.com/5/slate/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <center>
+        <h1>DOCKER COMPOSE .ENV EDITOR</h1>
+        <input type="file" id="file-input" class="btn btn-secondary ms-2" accept=".env">
+    </center>
+    <div class="container my-5 bg-secondary shadow-lg" style="border: 2px solid gray; border-radius: 15px;">
+        
+        <div class="px-3 py-3 my-3 bg-primary shadow-lg" style="border: 2px solid gray; border-radius: 15px;">
+            <div class="mb-3">
+                <input type="text" id="search-bar" class="form-control" placeholder="Search by key...">
+            </div>
+            <form id="dynamic-form" class="mt-4"></form>
+            <center>
+                <div class="my-3">
+                    <!-- <button id="add-pair-btn" class="btn btn-secondary me-2">Add Key/Value Pair</button>
+                    <button id="add-comment-btn" class="btn btn-secondary me-2">Add Comment</button> -->
+                    <button id="save-btn" class="btn btn-primary">Save Environment File</button>
+                </div>
+            </center>
+        </div>
+    </div>
+
+    <script>
+        // Sample data object
+        const data = {
+            "KEY": "value",
+        };
+
+        function countStartingHashes(str) {
+            let count = 0;
+            for (let char of str) {
+                if (char === '#') {
+                    count++;
+                } else {
+                    return count;
+                }
+            }
+        }
+
+        // Function to generate form
+        function generateForm(data) {
+            const form = document.getElementById('dynamic-form');
+            form.innerHTML = ''; // Clear existing form content
+
+            for (const key in data) {
+                if (data.hasOwnProperty(key)) {
+                    const formGroup = document.createElement('div');
+                    if (key.startsWith('__COMMENT__')) {
+                        formGroup.className = 'row mb-0 align-items-left form-group d-flex justify-content-center';
+                    } else {
+                        formGroup.className = 'row mb-2 align-items-center form-group d-flex justify-content-center';
+                        formGroup.dataset.key = key.toLowerCase(); // Store the key for filtering
+                    }
+                    
+                    // const label = document.createElement('label');
+                    // label.className = 'col-form-label col-sm-5 fw-bold my-0 py-0';
+                    // label.htmlFor = key;
+                    
+                    const inputDiv = document.createElement('div');
+                    inputDiv.className = 'col-sm-7';
+
+                    if (key.startsWith('__COMMENT__')) {
+                        const label = document.createElement('label');
+                        label.htmlFor = key;
+                        label.innerText = key;
+                        label.id = key+"_label";
+
+                        const dummy_input = document.createElement('label');
+                        const input = document.createElement('input');
+
+                        dummy_input.className = 'col-form-label text-info text-small py-0';
+                        // dummy_input.id = key;
+                        dummy_input.name = key;
+                        let comment = data[key];
+                        let hashcount = countStartingHashes(comment);
+                        let sectioncomment = comment.startsWith("#>");
+                        comment = comment.replace(/^#+/, '').replace(/^>+/, '').trim()
+                        if (hashcount == 1 && !sectioncomment) {
+                            if (comment === comment.toUpperCase()) {
+                                // Section header found
+                                dummy_input.innerText = comment;
+                                dummy_input.className = 'col-form-label col-sm-12 fw-bold fs-2 text-center mb-0 mt-5 py-0';
+                                label.className = 'col-form-label col-sm-0 my-0 py-0 d-none';
+                                inputDiv.className = 'col-sm-10';
+                            } else {
+                                // Normal comment
+                                dummy_input.innerText = comment;
+                                label.className = 'col-form-label col-sm-5 fw-bold my-0 py-0 opacity-0';
+                            }
+                            label.innerText = "#"; // Store prefix for later
+                        } else if (sectioncomment) {
+                            // Section comment found
+                            dummy_input.innerText = comment;
+                            dummy_input.className = 'col-form-label text-info col-sm-12 fs-5 text-left my-0 py-0';
+                            label.className = 'col-form-label col-sm-0 fw-bold my-0 py-0 d-none';
+                            inputDiv.className = 'col-sm-10';
+                            label.innerText = "#>"; // Store prefix for later
+                        } else {
+                            // Custom depth header comment found
+                            dummy_input.innerText = comment;
+                            dummy_input.className = `col-form-label fw-bold col-sm-12 fs-${hashcount+1} text-center mt-3 mb-0 py-0`;
+                            label.className = 'col-form-label col-sm-0 fw-bold my-0 py-0 d-none';
+                            inputDiv.className = `col-sm-${12-hashcount}`;
+                            label.innerText = "#".repeat(hashcount); // Store prefix for later
+                        }
+                        input.id = key;
+                        input.name = key;
+                        input.value = comment;
+                        input.type = 'text';
+                        input.className = 'form-control d-none';
+                        inputDiv.appendChild(dummy_input);
+                        inputDiv.appendChild(input);
+                        formGroup.appendChild(label);
+                        formGroup.appendChild(inputDiv);
+                        form.appendChild(formGroup);
+                    } else {
+                        const label = document.createElement('label');
+                        label.className = 'col-form-label col-sm-5 fw-bold my-0 py-0';
+                        label.htmlFor = key;
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'form-control';
+                        input.id = key;
+                        input.name = key;
+                        input.value = data[key];
+                        label.innerText = key;
+                        
+                        inputDiv.appendChild(input);
+                        formGroup.appendChild(label);
+                        formGroup.appendChild(inputDiv);
+                        form.appendChild(formGroup);
+                    }
+                }
+            }
+        }
+
+        async function saveAsEnv() {
+            const form = document.getElementById('dynamic-form');
+            const formData = new FormData(form);
+            let envContent = '';
+
+            formData.forEach((value, key) => {
+                if (key.startsWith('__COMMENT__')) {
+
+                    let comment_type = document.getElementById(key+"_label").innerText;
+
+                    envContent += `${comment_type}${value}\n`;
+                } else {
+                    envContent += `${key.toUpperCase()}="${value}"\n`;
+                }
+            });
+
+            const fileHandle = await window.showSaveFilePicker({
+                suggestedName: 'config.env',
+                types: [{
+                    description: 'Env Files',
+                    accept: {'text/plain': ['.env']}
+                }]
+            });
+
+            const writableStream = await fileHandle.createWritable();
+            await writableStream.write(envContent);
+            await writableStream.close();
+        }
+
+        // Function to parse .env file and update form
+        function parseEnvFile(content) {
+            const lines = content.split('\n');
+            const data = {};
+            let comment_index = 0;
+            lines.forEach(line => {
+                line = line.trim();
+                if (line) {
+                    if (line.startsWith('#')) {
+                        data[`__COMMENT__${comment_index}`]= line;
+                        comment_index++;
+                    } else {
+                        const commentIndex = line.indexOf('#');
+                        if (commentIndex !== -1) {
+                            line = line.slice(0, commentIndex).trim();
+                        }
+                        const match = line.match(/^([^=]+)=(.*)$/);
+                        if (match) {
+                            let value = match[2].trim();
+                            if (
+                                (value.startsWith('"') && value.endsWith('"')) 
+                                || (value.startsWith("'") && value.endsWith("'"))
+                            ) {
+                                value = value.slice(1, -1); // Remove surrounding quotes
+                            }
+                            const key = match[1].trim();
+                            data[key] = value;
+                        }
+                    }
+                }
+            });
+
+            generateForm(data);
+        }
+
+        // Function to handle file input change event
+        function handleFileInput(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const content = e.target.result;
+                    parseEnvFile(content);
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Function to handle search bar input event
+        function handleSearch(event) {
+            const query = event.target.value.trim().toLowerCase();
+            const formGroups = document.querySelectorAll('.form-group');
+
+            if (!query) {
+                formGroups.forEach(group => {
+                    group.classList.remove('d-none');
+                });
+            } else {
+                formGroups.forEach(group => {
+                    const key = group.dataset.key;
+                    if (key && key.includes(query)) {
+                        group.classList.remove('d-none'); // Show if key matches query
+                    } else {
+                        group.classList.add('d-none'); // Hide if no match
+                    }
+                });
+            }
+
+            
+        }
+
+
+
+        // Function to add a new key/value pair
+        function addKeyValuePair() {
+            const form = document.getElementById('dynamic-form');
+            const formGroup = document.createElement('div');
+            formGroup.className = 'row mb-2 align-items-center form-group d-flex justify-content-center';
+
+            const label = document.createElement('label');
+            label.className = 'col-form-label col-sm-5 fw-bold my-0 py-0';
+            label.innerText = 'NEW_KEY';
+            
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'col-sm-7';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control';
+            input.name = 'NEW_KEY';
+            input.value = 'NEW_VALUE';
+            
+            inputDiv.appendChild(input);
+            formGroup.appendChild(label);
+            formGroup.appendChild(inputDiv);
+            form.appendChild(formGroup);
+        }
+
+        // Function to add a new comment
+        function addComment() {
+            const form = document.getElementById('dynamic-form');
+            const formGroup = document.createElement('div');
+            formGroup.className = 'row mb-0 align-items-left form-group d-flex justify-content-center';
+
+            const label = document.createElement('label');
+            label.className = 'col-form-label col-sm-12 fw-bold my-0 py-0';
+            label.innerText = 'New Comment';
+            label.htmlFor = '__COMMENT__NEW';
+            
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'col-sm-7';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control';
+            input.name = '__COMMENT__NEW';
+            input.value = '# New Comment';
+            
+            inputDiv.appendChild(input);
+            formGroup.appendChild(label);
+            formGroup.appendChild(inputDiv);
+            form.appendChild(formGroup);
+        }
+
+        // Event listeners
+        document.getElementById('save-btn').addEventListener('click', saveAsEnv);
+        document.getElementById('file-input').addEventListener('change', handleFileInput);
+        document.getElementById('search-bar').addEventListener('input', handleSearch);
+        // document.getElementById('add-pair-btn').addEventListener('click', addKeyValuePair);
+        // document.getElementById('add-comment-btn').addEventListener('click', addComment);
+
+        // Call the function to generate form
+        generateForm(data);
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.1.3/js/bootstrap.min.js"></script>
+</body>
+</html>
