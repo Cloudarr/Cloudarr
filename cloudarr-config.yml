@@ -147,18 +147,6 @@ homepage:
         - tertiary
         - filesafe
         - bigbackup
-
-    - Andrew:
-      items:
-        - filesafe-browser
-        - bignas-browser
-        - bigbackup-browser
-        - secondary-browser
-      
-    - Angel's Services:
-      items:
-        - angels-router
-        - angels-esxi
   
 
 # Traefik.yml static config
