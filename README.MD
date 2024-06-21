@@ -10,12 +10,6 @@ Cloudarr uses two files for configuration:
 `./.env` is used to set environment variables.
 `./cloudarr-config.yml`is used to generate and patch a number of different config files.
 
-> Cloudar's config system is a simplified combination of Traefik's dynamic-config.yml, Authelia's configuration.yml and Homepage's services.yml and settings.yml
-> Some changes, like those affecting Homepage or Traefik's dynamic-config.yml will take effect immediately. Changes that affect traefik.yml or Authelia's configuration.yml will not take effect until their respective container is restarted
-> Cloudarr's Traefik/Authelia containers have been pre-configured to route http and https addresses automatically. Pre-defined TLS and transport layer configurations have been created to support both new and old local machines.
-
-Certain considerations have been taken to configure services as securely as possible while still exposing important endpoints such as the Waultwarden api. See the "authelia:access_control" section of `cloudarr-config.yml` for details.
-
 This project assumes a few things:
 - You are using a modern version of Docker and Docker Compose
 - You are using a modern version of Ubuntu (Might work on WSL but not officially supported).
@@ -67,10 +61,15 @@ This project needs a few things in the long term:
 <hr>
 
 ## Config:
-- Create a `.env` file in the same folder as the compose files. This is where 90% of your configuration will be. **You need to do this *BEFORE* running the** `APPLY_CONFIG.PY` **or** `./prepare.sh` **scripts as they pull from `./.env`.** 
+- Create a `.env` file from template.env in the same folder as the compose files. This is where 90% of your configuration will be. Cloudarr comes with a self-contained browser-based editor. Simply open `./env_editor.html` and use it to open the env file and it will be formatted for a pleasant editing experience. **You need to do this *BEFORE* running the** `APPLY_CONFIG.PY` **or** `./prepare.sh` **scripts as they pull from `./.env`.** 
 - Run `sudo bash ./prepare.sh` to set up the database init script for Guacamole. **You need to do this *BEFORE* runnning** `./apply_config.py` **for the first time. You should only need to do this once.**
 - Set up cloudflare origin certificates in `./cloudflare_certs`
 - Configure `./cloudarr-config.yml` This file configures Authelia, Traefik, and GetHomepage. A configuration guide is being developed, but the config file is well commented.
+
+> Cloudar's cloudarr-config.yml system is a simplified combination of Traefik's dynamic-config.yml, Authelia's configuration.yml and Homepage's services.yml and settings.yml.
+> Some changes, like those affecting Homepage or Traefik's dynamic-config.yml will take effect immediately. Changes that affect traefik.yml or Authelia's configuration.yml will not take effect until their respective container is restarted
+> Cloudarr's Traefik/Authelia containers have been pre-configured to route http and https addresses automatically. Pre-defined TLS and transport layer configurations have been created to support both new and old local machines.
+> Certain considerations have been taken to configure securely while still exposing important endpoints such as the Waultwarden api. See the "authelia:access_control" section of `cloudarr-config.yml` for details.
 
 - Run `sudo python3 ./apply_config.py` - this script does a number of things, notably it reads the contents of `./.env` & `./cloudarr-config.yml` and generates several configuration files. Some environment variable or template changes require container restarts to take effect, others are immediate. Here's a breakdown of what it does:
   - Recreates the following files:
@@ -80,6 +79,9 @@ This project needs a few things in the long term:
     - Creates `$CONFIGDIR/homepage/services.yaml` *These changes take effect immediately*
     - Creates `$CONFIGDIR/homepage/settings.yaml` *These changes take effect immediately*
     - Patches `$CONFIGDIR/guacamole/postgress/init/initdb.sql` to use the built-in Cloudarr ldap admin rather than guacadmin. If you need to specify a different user you can edit the script fairly easily for a different admin user at the bottom of `./apply_config.py`. *For changes to the init script to take effect you must remove the guac_guacd, guac_postgres, and guacamole containers and volumes and recreate them by running the compose-up script again. This process will delete existing users.*
+
+- Finally run `sudo bash ./compose-up.sh` to start the stack
+- Wait a few moments and then open your domain, if everything worked right you should see the home page.
 
 
 ***Configure Homeassistant to trust Traefik proxy***
