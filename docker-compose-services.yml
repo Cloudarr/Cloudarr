@@ -1,0 +1,649 @@
+
+networks:
+  traefik_network:
+    driver: bridge
+    name: traefik_network
+    external: true
+
+volumes:
+  audiobooks:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${AUDIOBOOKSDIR}'
+
+  books:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${BOOKSDIR}'
+
+  downloads:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${DOWNLOADSDIR}'
+
+  movies:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MOVIESDIR}'
+  
+  music:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MUSICDIR}'
+
+  photos:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${PHOTOSDIR}'
+
+  shows:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${SHOWSDIR}'
+
+  documents:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${DOCUMENTSDIR}'
+  
+  podcasts:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${PODCASTSDIR}'
+
+  models:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MODELSDIR}'
+  
+  prints:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${PRINTSSDIR}'
+
+  git:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${GITDIR}'
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    # devices: 
+    #   - /dev/ttyUSB1
+    #   - /dev/ttyUSB0
+    networks:
+      - traefik_network
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CONFIGDIR}/homeassistant:/config
+      - ${CONFIGDIR}/homeassistant/data:/mnt/Data
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homeassistant.rule=Host(`homeassistant.${DOMAINNAME}`) || Host(`ha.${DOMAINNAME}`)"
+      - "traefik.http.services.homeassistant.loadbalancer.server.port=8123"
+      - "traefik.http.routers.homeassistant.entrypoints=https"
+
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: code-server
+    networks:
+      - traefik_network
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=$TZ
+      - PROXY_DOMAIN=code-server.$DOMAINNAME
+      - DEFAULT_WORKSPACE=/config/workspace
+    volumes:
+      - $CONFIGDIR/code-server:/config
+      - ./:/compose-root # To edit compose stack
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-server.entrypoints=https"
+      - "traefik.http.routers.code-server.rule=Host(`code-server.${DOMAINNAME}`)"
+      - "traefik.http.services.code-server.loadbalancer.server.port=8443"
+  
+  jupyter:
+    image: jupyter/base-notebook:latest
+    container_name: jupyter
+    networks:
+      - traefik_network
+    volumes:
+      - $CONFIGDIR/jupyter:/home/docker_worker/work
+    command: "start-notebook.sh"
+    user: root
+    environment:
+      NB_USER: ADMIN
+      NB_UID: 1001
+      NB_GID: 100
+      CHOWN_HOME: 'yes'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jupyter.entrypoints=https"
+      - "traefik.http.routers.jupyter.rule=Host(`jupyter.${DOMAINNAME}`)"
+      - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
+
+  it-tools:
+    container_name: it-tools
+    networks:
+      - traefik_network
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    image: corentinth/it-tools
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.it-tools.entrypoints=https"
+      - "traefik.http.routers.it-tools.rule=Host(`it-tools.${DOMAINNAME}`)"
+      - "traefik.http.services.it-tools.loadbalancer.server.port=80"
+
+  guacd:
+    container_name: guacd
+    hostname: guacd
+    image: guacamole/guacd
+    networks:
+      - traefik_network
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - TZ=${TZ}
+    restart: unless-stopped
+    expose:
+      - "4822"
+    ports:
+      - "4822:4822"
+    volumes:
+      - ${CONFIGDIR}/guacamole/guacd/drive:/drive:rw
+      - ${CONFIGDIR}/guacamole/guacd/record:/record:rw
+
+  guac_postgres:
+    image: postgres:15.2-alpine
+    container_name: guac_postgres
+    hostname: guac_postgres
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - PGDATA=/var/lib/postgresql/data/guacamole
+      - POSTGRES_DB=guacamole_db
+      - POSTGRES_PASSWORD=${GUACAMOLE_POSTGRESS_PASSWORD}
+      - POSTGRES_USER=${GUACAMOLE_POSTGRESS_USER}
+    volumes:
+      - ${CONFIGDIR}/guacamole/postgres/init:/docker-entrypoint-initdb.d:z
+      - ${CONFIGDIR}/guacamole/postgres/data:/var/lib/postgresql/data:Z
+  
+  guacamole:
+    image: guacamole/guacamole
+    container_name: guacamole
+    hostname: guacamole
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    depends_on:
+      - guacd
+      - guac_postgres
+    environment:
+      - TZ=${TZ}
+      - GUACD_HOSTNAME=guacd
+      - GUACD_PORT=4822
+      - POSTGRESQL_DATABASE=guacamole_db
+      - POSTGRESQL_HOSTNAME=guac_postgres
+      - POSTGRESQL_PASSWORD=${GUACAMOLE_POSTGRESS_PASSWORD}
+      - POSTGRESQL_USER=${GUACAMOLE_POSTGRESS_USER}
+      - LDAP_HOSTNAME=openldap
+      - LDAP_PORT=${OPENLDAP_PORT}
+      - LDAP_USER_BASE_DN=ou=people,${LDAP_BASE_DN}
+      - LDAP_GROUP_SEARCH_FILTER=CN=guacamoleusers,OU=groups,${LDAP_BASE_DN}
+      - LDAP_SEARCH_BIND_DN=cn=admin,${LDAP_BASE_DN}
+      - LDAP_SEARCH_BIND_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_USERNAME_ATTRIBUTE=uid
+    links:
+      - guacd
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.guacamole.entrypoints=https"
+      - "traefik.http.routers.guacamole.rule=Host(`guacamole.$DOMAINNAME`)"
+      - "traefik.http.routers.guacamole.middlewares=add-guacamole"
+      - "traefik.http.middlewares.add-guacamole.addPrefix.prefix=/guacamole"
+      - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
+
+  vaultwarden:
+    image: vaultwarden/server:latest
+    hostname: vaultwarden
+    container_name: vaultwarden
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    restart: unless-stopped
+    networks:
+      - traefik_network
+    volumes:
+      - ${CONFIGDIR}/vaultwarden/:/data
+    environment:
+      - TZ=${TZ}
+      - LOGIN_RATELIMIT_MAX_BURST=10
+      - LOGIN_RATELIMIT_SECONDS=60
+      - DOMAIN=https://$VW_PREFIX.$DOMAINNAME/
+      - INVITATION_ORG_NAME=x
+      - INVITATION_ALLOWED=${VW_SIGNUPS_ALLOWED}
+      - ADMIN_TOKEN=${VW_ADMIN_TOKEN}
+      - SIGNUPS_ALLOWED=false
+      - EMERGENCY_ACCESS_ALLOWED=true
+      - SENDS_ALLOWED=true
+      - WEB_VAULT_ENABLE=true
+      - WEBSOCKET_ENABLED=${VW_WEBSOCKET_ENABLED}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden.rule=Host(`$VW_PREFIX.$DOMAINNAME`)"
+      - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+
+  kavita:
+    image: lscr.io/linuxserver/kavita:latest
+    container_name: kavita
+    hostname: kavita
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    networks:
+      - traefik_network
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    volumes:
+      - "${CONFIGDIR}/kavita:/config"
+      - "books:/data:ro"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kavita.rule=Host(`read.${DOMAINNAME}`) || Host(`kavita.${DOMAINNAME}`)"
+      - "traefik.http.services.kavita.loadbalancer.server.port=5000"
+
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    hostname: navidrome
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    environment:
+      # -ND_REVERSEPROXYWHITELIST: $NAVIDROME_PROXYS
+      # -ND_REVERSEPROXYUSERHEADER: Remote-User
+      -ND_SCANSCHEDULE: 1h
+      -ND_LOGLEVEL: info  
+      -ND_SESSIONTIMEOUT: 24h
+      -ND_BASEURL: ""
+      -PUID: 1024
+      -PGID: 101
+      -TZ: ${TZ}
+    volumes:
+      - "${CONFIGDIR}/navidrome:/data"
+      - "music:/music:ro"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.navidrome.rule=Host(`music.${DOMAINNAME}`) || Host(`navidrome.${DOMAINNAME}`)" 
+      - "traefik.http.services.navidrome.loadbalancer.server.port=4533"
+  
+  picard:
+    image: mikenye/picard:latest
+    hostname: picard
+    container_name: picard
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -PUID: 1024
+      -PGID: 101
+      -TZ: ${TZ}
+    volumes:
+      - ${CONFIGDIR}/picard:/config:rw
+      - music:/storage:rw
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.picard.rule=Host(`picard.${DOMAINNAME}`)"
+      - "traefik.http.services.picard.loadbalancer.server.port=5800"
+
+  filebrowser:
+    hostname: filebrowser
+    container_name: filebrowser
+    image: filebrowser/filebrowser
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    volumes:
+      - "${CONFIGDIR}/filebrowser/db:/config"
+      - "${CONFIGDIR}/filebrowser/config/config.json:/.filebrowser.json"
+      - "shows:/data/shares/TV Shows"
+      - "movies:/data/shares/Movies"
+      - "music:/data/shares/Music"
+      - "books:/data/shares/Books"
+      - "audiobooks:/data/shares/Audiobooks"
+      - "downloads:/data/downloads/"
+      - "models:/data/shares/Models"
+      - "prints:/data/shares/Prints"
+    environment:
+      -TZ: ${TZ}
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.filebrowser.rule=Host(`filebrowser.${DOMAINNAME}`)"
+      - "traefik.http.services.filebrowser.loadbalancer.server.port=80"
+
+  jellyfin:
+    container_name: jellyfin
+    hostname: jellyfin
+    image: jellyfin/jellyfin 
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment: 
+      - JELLYFIN_CACHE_DIR=/var/cache/jellyfin 
+      - JELLYFIN_CONFIG_DIR=/etc/jellyfin 
+      - JELLYFIN_DATA_DIR=/var/lib/jellyfin 
+      - JELLYFIN_LOG_DIR=/var/log/jellyfin 
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    volumes: 
+      - ${CONFIGDIR}/jellyfin/etc:/etc/jellyfin 
+      - ${CONFIGDIR}/jellyfin/var-cache:/var/cache/jellyfin 
+      - ${CONFIGDIR}/jellyfin/var-lib:/var/lib/jellyfin 
+      - ${CONFIGDIR}/jellyfin/var-log:/var/log/jellyfin
+      - /etc/timezone:/etc/timezone:ro
+      - "shows:/mnt/shares/TV Shows"
+      - "movies:/mnt/shares/Movies"
+      - "music:/mnt/shares/Music"
+      - "books:/mnt/shares/Books"
+      - "audiobooks:/mnt/shares/Audiobooks"
+    group_add: 
+      - "109" 
+    networks:
+      - traefik_network
+    ports:
+      - ${JELLYFIN_PORT}:8096
+      - ${JELLYFIN_PORT_2}:8920
+    devices: # This might vary based on your use case
+      - "/dev/dri/renderD128:/dev/dri/renderD128"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.${DOMAINNAME}`)"
+      - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
+  
+  filebot:
+    container_name: filebot
+    image: jlesage/filebot
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -PUID: 1024
+      -PGID: 101
+      -TZ: ${TZ}
+    volumes:
+      - ${CONFIGDIR}/filebot:/config:rw
+      - shows:/storage/tvshows:rw
+      - movies:/storage/movies:rw
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.filebot.rule=Host(`filebot.${DOMAINNAME}`)"
+      - "traefik.http.services.filebot.loadbalancer.server.port=5800"
+
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    hostname: audiobookshelf
+    container_name: audiobookshelf
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -PUID: 1024
+      -PGID: 101
+      -TZ: ${TZ}
+    networks:
+      - traefik_network
+    volumes:
+      - audiobooks:/audiobooks
+      - podcasts:/podcasts
+      - ${CONFIGDIR}/audiobookshelf/metadata:/metadata
+      - ${CONFIGDIR}/audiobookshelf:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.audiobookshelf.rule=Host(`audiobookshelf.${DOMAINNAME}`)"
+      - "traefik.http.services.audiobookshelf.loadbalancer.server.port=80"
+    
+  prusa:
+    image: mikeah/prusaslicer-novnc
+    container_name: prusa
+    hostname: prusa
+    environment:
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - DISPLAY=:0
+      - VGL_DISPLAY=egl # needed to run without X server
+      - SUPD_LOGLEVEL=INFO 
+      - ENABLEHWGPU=true
+      - VNC_RESOLUTION=1280x720
+    networks:
+      - traefik_network
+    volumes:
+      - $CONFIGDIR/prusa/data:/configs/
+      - "models:/Models"
+      - "prints:/Prints"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prusa.rule=Host(`prusa.${DOMAINNAME}`)"
+      - "traefik.http.services.prusa.loadbalancer.server.port=8080"
+
+  fdm-monster-mongodb:
+    image: mongo:7
+    container_name: fdm-monster-mongodb
+    hostname: fdm-monster-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=$FDM_MONSTER_MONGO_INITDB_ROOT_USERNAME
+      - MONGO_INITDB_ROOT_PASSWORD=$FDM_MONSTER_MONGO_INITDB_ROOT_PASSWORD
+    volumes:
+      - $CONFIGDIR/fdm-monster/data:/data
+    networks:
+      - traefik_network
+    restart: unless-stopped
+
+  fdm-monster:
+    container_name: fdm-monster
+    image: fdmmonster/fdm-monster:1.5.4
+    restart: unless-stopped
+    depends_on:
+      - fdm-monster-mongodb
+    environment:
+      - MONGO=mongodb://$FDM_MONSTER_MONGO_INITDB_ROOT_USERNAME:$FDM_MONSTER_MONGO_INITDB_ROOT_PASSWORD@fdm-monster-mongodb:27017/fdm-monster?authSource=admin
+      - NODE_ENV=development
+      - SERVER_PORT=4000
+    volumes:
+      - $CONFIGDIR/fdm-monster/media/:/app/media
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fdm-monster.rule=Host(`fdm-monster.${DOMAINNAME}`)"
+      - "traefik.http.services.fdm-monster.loadbalancer.server.port=4000"
+
+  gitea:
+    image: gitea/gitea:latest
+    container_name: gitea
+    hostname: gitea
+    restart: always
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - DB_TYPE=postgres
+      - DB_HOST=gitea_postgres:5432
+      - DB_NAME=gitea_postgres
+      - DB_USER=${GITEA_POSTGRESS_USER}
+      - DB_PASSWD=${GITEA_POSTGRESS_PASSWORD}
+      - APP_NAME="$SITE_NAME Git Server"
+      - RUN_MODE=prod
+      - DOMAIN=$DOMAINNAME
+      - DISABLE_SSH=$GITEA_DISABLE_SSH
+    networks:
+      - traefik_network
+    volumes:
+      - git:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "222:22"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gitea.rule=Host(`gitea.${DOMAINNAME}`)"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+  
+  gitea_postgres:
+    image: postgres:alpine
+    container_name: gitea_postgres
+    hostname: gitea_postgres
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - POSTGRES_DB=gitea_postgres
+      - POSTGRES_PASSWORD=${GITEA_POSTGRESS_PASSWORD}
+      - POSTGRES_USER=${GITEA_POSTGRESS_USER}
+    volumes:
+      - $CONFIGDIR/gitea/postgres:/var/lib/postgresql/data
+ 
+  redlib:
+    image: quay.io/redlib/redlib:latest
+    restart: always
+    container_name: "redlib"
+    user: nobody
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file: .env
+    networks:
+      - traefik_network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "--tries=1", "http://localhost:8080/settings"]
+      interval: 5m
+      timeout: 3s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.redlib.rule=Host(`redlib.${DOMAINNAME}`)"
+      - "traefik.http.services.redlib.loadbalancer.server.port=8080"
+
+  miniflux:
+    image: miniflux/miniflux:latest
+    container_name: miniflux
+    networks:
+      - traefik_network
+    depends_on:
+      miniflux-db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://$MINIFLUX_POSTGRES_USER:$MINIFLUX_POSTGRES_PASSWORD@miniflux-db/miniflux-db?sslmode=disable
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=$MINIFLUX_ADMIN_PASSWORD
+      - AUTH_PROXY_HEADER=Remote-User
+      - AUTH_PROXY_USER_CREATION=1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.miniflux.rule=Host(`miniflux.${DOMAINNAME}`)"
+      - "traefik.http.services.miniflux.loadbalancer.server.port=8080"
+
+  miniflux-db:
+    image: postgres:15
+    container_name: miniflux-db
+    networks:
+      - traefik_network
+    environment:
+      - POSTGRES_USER=$MINIFLUX_POSTGRES_USER
+      - POSTGRES_PASSWORD=$MINIFLUX_POSTGRES_PASSWORD
+      - POSTGRES_DB=miniflux-db
+    volumes:
+      - $CONFIGDIR/miniflux/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "miniflux"]
+      interval: 10s
+      start_period: 30s

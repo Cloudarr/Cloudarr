@@ -1,0 +1,166 @@
+@import url("https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css");
+
+/* body {
+}
+.service-container {
+}
+
+*/ 
+
+.rotate-180 {
+    transform: rotate(180deg);
+}
+
+.menu-dropdown {
+    top: 100%;
+    z-index: 90000;
+    right: 0;
+    background: #333333aa;
+    color: #ffffffbb;
+    font-size: small;
+    white-space: nowrap;
+}
+/* .menu-dropdown:hover {
+    background: #000000cc;
+} */
+.menu-dropdown li:hover {
+    background: #444444cc;
+}
+
+.menu-dropdown li {
+    margin: 0px;
+}
+
+/* .menu-dropdown li {
+    padding-top: 2px;
+    padding-bottom: 2px;
+} */
+
+
+.bg-theme-500{
+    all: unset;
+}
+.bg-theme-900{
+    all: unset;
+}
+ 
+.service-name {
+    float: left;
+}
+
+.account-icon {
+    font-size: 24px !important;
+}
+
+.logout-icon {
+    font-size: 18px !important;
+    color: #ffffff99 !important;
+}
+
+.service-group, .service-security, .service-type {
+    font-size: 17px !important;
+    padding: 2px 3px;
+    margin-left: 2px;
+    margin-right: 2px;
+}
+
+.service-group {
+    color: #9bc0f0;
+}
+
+.service-security {
+    color: #ffc107;
+}
+
+.service-type {
+    color: #a6f8b9;
+}
+
+.service-health {
+    color: #10b981cc;
+}
+
+
+.service-block {
+    margin: 4px !important;
+    padding: 0px !important;
+}
+
+.tag-icon {
+    margin: 0px !important;
+    padding: 0px !important;
+}
+
+.service-icon {
+    background: radial-gradient(circle, rgba(129, 184, 255, 0.30) 0%, rgba(0,0,0,0) 70%) !important;
+    width: 48px !important;
+    height: 48px !important;
+}
+
+.service-tags {
+    text-align: right !important;
+}
+
+/* .docker-status-running {
+    display: none !important;
+} */
+/* .docker-status-healthy {
+    display: none !important;
+} */
+ .docker-status {
+    line-height: 10px !important;
+ }
+
+.tooltip, .tooltip-bottom {
+    position:relative;
+}
+
+.tooltip:after, .tooltip-bottom::after {
+    position: absolute;
+    z-index : 10000;
+    font-size: 0.75em !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    background:#333333dd;
+    color: #ffffffbb;
+    border-radius:5px;
+    display:none;
+    margin: 0px;
+    padding:4px;
+}
+
+.tooltip:after {
+    content: attr(data-tooltip);
+    top:50%;
+    right:100%;
+    transform:translateY(-50%);
+    white-space: nowrap;
+    margin-right: 3px;
+}
+
+.tooltip-bottom:after {
+    content: attr(data-tooltip);
+    top:100%;
+    left:0%;
+    transform:translateY(-0%);
+    white-space: pre;
+}
+
+.service-container-stats {
+    width: 100%;
+}
+
+.tooltip-type:after {
+    content: "Host: " attr(data-tooltip);
+}
+
+.tooltip-security:after {
+    content: "Security: " attr(data-tooltip);
+}
+
+.tooltip-group:after {
+    content: "Group: " attr(data-tooltip);
+}
+
+.tooltip:hover:after, .tooltip-bottom:hover:after {
+    display:block;
+}

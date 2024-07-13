@@ -1,0 +1,480 @@
+networks:
+  # This gets shared to the other stacks
+  # You will need to use this network for each 
+  # container you add to traefik using compose labels
+  # To do so, copy the below network section to another
+  # compose file's network section and set external: true
+  traefik_network:
+    driver: bridge
+    name: traefik_network
+    external: false
+
+volumes: # Prevents common permissions issue with acme dir
+  acme:
+
+services:
+  authelia:
+    image: authelia/authelia
+    container_name: authelia
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    volumes:
+      - ${CONFIGDIR}/authelia:/config
+    networks:
+      traefik_network: {}
+    labels:
+      - 'traefik.enable=true'   
+      - 'traefik.http.routers.authelia.rule=Host(`${AUTHELIA_PREFIX}.${DOMAINNAME}`) || Host(`auth.${DOMAINNAME}`)'
+      - 'traefik.http.routers.authelia.entrypoints=https' 
+      - 'traefik.http.routers.authelia.tls=true'
+      - 'traefik.http.routers.authelia.tls.options=default'
+      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:${AUTHELIA_PORT}/api/authz/forward-auth'
+      - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
+      - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User, Remote-Groups, Remote-Name, Remote-Email'  
+    ports:
+      - ${AUTHELIA_PORT}:${AUTHELIA_PORT}
+    restart: unless-stopped
+    environment:
+      - TZ=$TZ
+      - X_AUTHELIA_CONFIG_FILTERS=template
+
+  # Built locally from ./authelia-group-check
+  authelia-group-check:
+    container_name: authelia-group-check
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    build:
+      context: authelia-group-check
+      target: builder
+    stop_signal: SIGINT # Don't change this
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authelia-group-check.rule=Host(`${DOMAINNAME}`) && PathPrefix(`/groups`) || Host(`homepage.${DOMAINNAME}`) && PathPrefix(`/groups`)"
+      - "traefik.http.services.authelia-group-check.loadbalancer.server.port=8000"
+      
+  openldap:
+    image: osixia/openldap:latest
+    container_name: openldap
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    hostname: openldap
+    volumes: 
+      - ${CONFIGDIR}/openldap/ldap/db:/var/lib/ldap:rw
+      - ${CONFIGDIR}/openldap/ldap/conf:/etc/ldap/slapd.d:rw
+    networks:
+      - traefik_network
+    ports:
+      - ${OPENLDAP_PORT}:${OPENLDAP_PORT}
+      - ${OPENLDAP_LDAPS_PORT}:${OPENLDAP_LDAPS_PORT}
+    restart: unless-stopped
+    command: --copy-service
+    environment:
+      TZ: $TZ
+      LDAP_ORGANISATION: ${LDAP_ORGANISATION}
+      LDAP_DOMAIN: ${DOMAINNAME}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_USERNAME: admin
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LDAP_CONFIG_PASSWORD: ${LDAP_CONFIG_PASSWORD}
+      LDAP_TLS_VERIFY_CLIENT: ${LDAP_TLS_VERIFY_CLIENT}
+      LDAP_READONLY_USER: ${LDAP_READONLY_USER}
+      LDAP_READONLY_USER_USERNAME: ${LDAP_READONLY_USER_USERNAME}
+      LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_USER_PASSWORD}
+      LDAP_RFC2307BIS_SCHEMA: ${LDAP_RFC2307BIS_SCHEMA}
+      LDAP_BACKEND: ${LDAP_BACKEND}
+      LDAP_REPLICATION: ${LDAP_REPLICATION}
+      KEEP_EXISTING_CONFIG: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "true"
+      LDAP_PORT_NUMBER: ${OPENLDAP_PORT}
+      LDAP_LDAPS_PORT_NUMBER: ${OPENLDAP_LDAPS_PORT}
+      
+  ldap-user-manager:
+    image: wheelybird/ldap-user-manager:v1.9
+    container_name: ldap-user-manager
+    networks:
+      - traefik_network
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    ports:
+      - ${LDAP_USER_MANAGER_PORT}:80
+    restart: always
+    depends_on:
+      - openldap
+    environment:
+      TZ: $TZ
+      SERVER_HOSTNAME: ldap-user-manager.${DOMAINNAME}
+      ORGANISATION_NAME: ${LDAP_ORGANISATION}
+      LDAP_URI: "ldap://openldap:${OPENLDAP_PORT}"
+      LDAP_BASE_DN: "${LDAP_BASE_DN}"
+      LDAP_ADMINS_GROUP: "admins"
+      LDAP_ADMIN_BIND_DN: "cn=admin,${LDAP_BASE_DN}"
+      LDAP_ADMIN_BIND_PWD: ${LDAP_ADMIN_PASSWORD} 
+      LDAP_DEBUG: "true"
+      LDAP_IGNORE_CERT_ERRORS: "true"
+      LDAP_REQUIRE_STARTTLS: "false"
+      LDAP_DOMAIN: "${DOMAINNAME}"
+      EMAIL_DOMAIN: "@${DOMAINNAME}"
+      NO_HTTPS: "true"
+      ACCEPT_WEAK_PASSWORDS : "true"
+      EMAIL_FROM_ADDRESS: "admin@${DOMAINNAME}"
+      REMOTE_HTTP_HEADERS_LOGIN: "${LUM_REMOTE_HTTP_HEADERS_LOGIN}"
+    labels:
+      - "traefik.enable=true"
+      - 'traefik.http.routers.ldap-user-manager.rule=Host(`ldap-user-manager.${DOMAINNAME}`) || Host(`admin.${DOMAINNAME}`)'
+      - "traefik.http.services.ldap-user-manager.loadbalancer.server.port=80"
+      - "traefik.http.services.ldap-user-manager.loadbalancer.server.scheme=http"
+
+  cloudflare-ddns:
+    container_name: cloudflare-ddns
+    image: oznu/cloudflare-ddns:latest
+    restart: always
+    networks:
+      - traefik_network
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - TZ=$TZ
+      - CF_API_EMAIL=${CF_API_EMAIL}
+      - CF_API_KEY=${CF_API_KEY}
+      - ZONE=${DOMAINNAME}
+      - SUBDOMAIN=*
+      - PROXIED=true
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    networks:
+      traefik_network:
+        aliases:
+          - '${AUTHELIA_PREFIX}.${DOMAINNAME}'
+    restart: unless-stopped
+    environment:
+      - TZ=$TZ
+    command:
+      # Traefik Config
+      - "--api"
+      - '--global.sendAnonymousUsage=false'
+      - '--global.checkNewVersion=false'
+      # Entrypoints Config
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.https.address=:443"
+      - "--entrypoints.http.redirections.entrypoint.to=https"
+      - "--entrypoints.http.redirections.entrypoint.scheme=https"
+      # Logging
+      - '--log=true'
+      - '--log.level=DEBUG'
+      - '--log.filepath=/logs/traefik/traefik.log'
+    labels:
+      - "traefik.enable=true"
+      - 'traefik.http.routers.api.rule=Host(`traefik.${DOMAINNAME}`)'
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.tls.options=default"
+      - "traefik.http.routers.api.middlewares=authelia@docker"
+      - "traefik.http.routers.traefik.tls.domains[1].main=${DOMAINNAME}"
+      - "traefik.http.routers.traefik.tls.domains[1].sans=*.${DOMAINNAME}"
+    ports: # Expose port 80 (HTTP) and 443 (HTTPS)
+      - "${TRAEFIK_PORT_HTTP}:80"
+      - "${TRAEFIK_PORT_HTTPS}:443"
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    volumes:
+      - ${LOGSDIR}/traefik:/traefik_logs
+      - ./certificates.yaml:/certificates.yaml;ro
+      - ${CF_CERTS_DIR}:/certs:ro
+      - ${CF_CERTS_DIR}:/cloudflare/:ro
+      - acme:/acme   
+      - ${CONFIGDIR}/traefik/dynamic-config.yml:/dynamic-config.yml
+      - ${CONFIGDIR}/traefik/traefik.yml:/traefik.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    user: root
+    networks:
+      - traefik_network
+    environment:
+      - TZ=$TZ
+    ports:
+      - ${HOMEPAGE_PORT}:3000
+    volumes:
+      - ${CONFIGDIR}/homepage:/app/config
+      - ${LOGSDIR}/homepage:/app/config/logs
+      - ${CONFIGDIR}/homepage/images:/app/public/images
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - 'traefik.http.routers.homepage.rule=Host(`${DOMAINNAME}`) && !PathPrefix(`/groups`) || Host(`homepage.${DOMAINNAME}`) && !PathPrefix(`/groups`)'
+      - "traefik.http.services.homepage.loadbalancer.server.port=3000"
+      - "traefik.http.services.homepage.loadbalancer.server.scheme=http"
+      - "traefik.http.routers.homepage.priority=900"
+
+      # Create domain.ext/logout redirect
+      - "traefik.http.middlewares.redirect-logout-base.redirectregex.regex=^https://${DOMAINNAME}/logout(.*)"
+      - "traefik.http.middlewares.redirect-logout-base.redirectregex.replacement=https://${AUTHELIA_PREFIX}.${DOMAINNAME}/logout$${1}"
+      - "traefik.http.middlewares.redirect-logout-base.redirectregex.permanent=true"
+
+      # Create domain.ext/change_password redirect
+      - "traefik.http.middlewares.redirect-change-password-base.redirectregex.regex=^https://${DOMAINNAME}/change_password(.*)"
+      - "traefik.http.middlewares.redirect-change-password-base.redirectregex.replacement=https://ldap-user-manager.${DOMAINNAME}/change_password$${1}"
+      - "traefik.http.middlewares.redirect-change-password-base.redirectregex.permanent=true"
+
+      # Create homepage.domain.ext/logout redirect
+      - "traefik.http.middlewares.redirect-logout.redirectregex.regex=^https://homepage.${DOMAINNAME}/logout(.*)"
+      - "traefik.http.middlewares.redirect-logout.redirectregex.replacement=https://${AUTHELIA_PREFIX}.${DOMAINNAME}/logout$${1}"
+      - "traefik.http.middlewares.redirect-logout.redirectregex.permanent=true"
+
+      # Create homepage.domain.ext/change_password redirect
+      - "traefik.http.middlewares.redirect-change-password.redirectregex.regex=^https://homepage.${DOMAINNAME}/change_password(.*)"
+      - "traefik.http.middlewares.redirect-change-password.redirectregex.replacement=https://ldap-user-manager.${DOMAINNAME}/change_password$${1}"
+      - "traefik.http.middlewares.redirect-change-password.redirectregex.permanent=true"
+
+      # Add all middlewares
+      - "traefik.http.routers.homepage.middlewares=redirect-logout-base,redirect-logout,redirect-change-password,redirect-change-password-base"
+
+  adguard:
+    image: adguard/adguardhome
+    container_name: adguard
+    volumes:
+      - ${CONFIGDIR}/adguardhome/conf:/opt/adguardhome/conf
+      - ${CONFIGDIR}/adguardhome/work:/opt/adguardhome/work
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    ports:
+      # WebUI (setup)
+      # - "${ADGUARD_SETUP_PORT}:3000"
+      # WebUI (deployed)
+      # - "${ADGUARD_DEPLOYED_PORT}:80"
+      # DNS
+      - "${ADGUARD_DNS_PORT}:53"
+      # # DHCP server
+      # - 67:67/udp
+      # - 68:68/udp
+      # # HTTPS/DNS-over-HTTPS
+      # - 443:443/tcp
+      # # DNS-over-TLS
+      # - 853:853/tcp
+      # # DNS-over-QUIC
+      # - 853:853/udp
+      # # DNSCrypt
+      # - 5443:5443/tcp
+      # - 5443:5443/udp
+    networks:
+      - traefik_network
+    environment:
+      - TZ=$TZ
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adguardhome.rule=Host(`adguard.${DOMAINNAME}`)"
+      - "traefik.http.services.adguardhome.loadbalancer.server.port=80"
+
+      - "traefik.http.routers.adguardhome-setup.rule=Host(`adguard-setup.${DOMAINNAME}`)"
+      - "traefik.http.services.adguardhome-setup.loadbalancer.server.port=3000"
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    hostname: grafana
+    user: "0:472"
+    networks:
+      - traefik_network
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - LDAP_LOGIN_BASE=$LDAP_BASE_DN
+      - LDAP_ADMIN_PASSWORD=$LDAP_ADMIN_PASSWORD
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_SECURITY_ADMIN_USER=$GF_SECURITY_ADMIN_USER
+      - GF_SECURITY_ADMIN_PASSWORD=$GF_SECURITY_ADMIN_PASSWORD
+      - GF_REMOTE_CACHE_TYPE=redis
+      - GF_REMOTE_CACHE_CONNSTR=addr=grafana-cache:6379,pool_size=100,db=0,ssl=false
+      - GF_AUTH_LDAP_ENABLED=true
+      - GF_AUTH_LDAP_ALLOW_SIGN_UP=true
+      - GF_AUTH_LDAP_CONFIG_FILE=/etc/grafana/ldap.toml
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=grafana-db:5432
+      - GF_DATABASE_USER=grafana
+      - GF_DATABASE_NAME=grafana
+      - GF_DATABASE_PASSWORD=$GF_DATABASE_PASSWORD
+      - GF_DATABASE_SSL_MODE=disable
+      - GF_USERS_DEFAULT_THEME=$CLOUDARR_THEME
+      - GF_PATHS_LOGS=/var/log/grafana
+    volumes:
+      - $LOGSDIR/grafana:/var/log/grafana:rw
+      - $CONFIGDIR/grafana/plugins:/var/lib/grafana/plugins:rw
+      - $CONFIGDIR/grafana/provisioning:/etc/grafana/provisioning:rw
+      - $CONFIGDIR/grafana/grafana.ini:/etc/grafana/grafana.ini:rw
+      - $CONFIGDIR/grafana/ldap.toml:/etc/grafana/ldap.toml:rw
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.$DOMAINNAME`)"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - grafana-db
+      - grafana-cache
+
+  grafana-cache:
+    image: redis:alpine
+    container_name: grafana-cache
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - TZ=$TZ
+    expose:
+      - 6379
+    restart: unless-stopped
+    networks:
+      - traefik_network
+
+  grafana-db:
+    image: postgres:12-alpine
+    container_name: grafana-db
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    restart: unless-stopped
+    expose:
+      - 5432
+    networks:
+      - traefik_network
+    environment:
+      - POSTGRES_DB=grafana
+      - POSTGRES_USER=grafana
+      - POSTGRES_PASSWORD=$GF_DATABASE_PASSWORD
+      - TZ=$TZ
+    volumes:
+      - $CONFIGDIR/grafana/db:/var/lib/postgresql/data
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    logging:
+      driver: none
+    restart: unless-stopped
+    ports:
+      - "$LOKI_PORT:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - traefik_network
+  
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    container_name: uptime-kuma
+    volumes:
+      - $CONFIGDIR/uptime-kuma:/app/data
+    networks:
+      - traefik_network
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime-kuma.rule=Host(`uptime-kuma.$DOMAINNAME`)"
+      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+
+  glances:
+    image: nicolargo/glances:latest-full
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    restart: unless-stopped
+    pid: "host"
+    privileged: true
+    networks:
+      - traefik_network
+    container_name: glances
+    hostname: glances
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "/run/user/1000/podman/podman.sock:/run/user/1000/podman/podman.sock:ro"
+      - "$CONFIGDIR/glances:/glances/conf"
+    environment:
+      - TZ=${TZ}
+      - "GLANCES_OPT=-C /glances/conf/glances.conf -w"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.glances.rule=Host(`glances.$DOMAINNAME`)"
+      - "traefik.http.services.glances.loadbalancer.server.port=61208"
+    # Uncomment for GPU compatibility (Nvidia) inside the container
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  portainer:
+    image: portainer/portainer-ce:alpine
+    container_name: portainer
+    command: -H unix:///var/run/docker.sock
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    networks:
+      - traefik_network
+    ports:
+      - "${PORTAINER_PORT}:9000"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "${CONFIGDIR}/portainer:/data"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAINNAME}`)"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+  
+  whatsupdocker:
+    image: fmartinou/whats-up-docker
+    container_name: whatsupdocker
+    networks:
+      - traefik_network
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - PUID=1024
+      - PGID=101
+      - TZ=${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CONFIGDIR}/wud:/store
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whatsupdocker.rule=Host(`whatsupdocker.${DOMAINNAME}`)"
+      - "traefik.http.services.whatsupdocker.loadbalancer.server.port=3000"

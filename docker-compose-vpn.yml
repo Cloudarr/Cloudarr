@@ -1,0 +1,537 @@
+networks:
+  traefik_network:
+    driver: bridge
+    name: traefik_network
+    external: true
+
+volumes:
+  audiobooks:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${AUDIOBOOKSDIR}'
+
+  books:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${BOOKSDIR}'
+
+  downloads:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${DOWNLOADSDIR}'
+
+  youtubemoviedownloads:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MOVIESDIR}/other'
+  
+  youtubemusicdownloads:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MUSICDIR}/other'
+
+  movies:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MOVIESDIR}'
+  
+  music:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${MUSICDIR}'
+
+  photos:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${PHOTOSDIR}'
+
+  shows:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${SHOWSDIR}'
+
+  documents:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${DOCUMENTSDIR}'
+  
+  podcasts:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      device: '${PODCASTSDIR}'
+
+services:
+  expressvpn:
+    image: polkaned/expressvpn
+    container_name: expressvpn
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    networks:
+      - traefik_network
+    environment:
+      - ACTIVATION_CODE=${EXPRESSVPN_ACTIVATION_CODE}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    privileged: true
+    tty: true
+    ports: # Expose ports to localhost
+      # QBT Port
+      - ${QBT_PORT}:8080
+      # Bittorrent port
+      - ${BITTORRENT_PORT}:6881
+      - ${BITTORRENT_PORT}:6881/udp
+      # Jackett port
+      - ${JACKETT_PORT}:9117
+      # Sonarr port
+      - ${SONARR_PORT}:8989
+      # Radarr port
+      - ${RADARR_PORT}:7878
+      # Lidarr port
+      - ${LIDARR_PORT}:8686
+      # Readarr port
+      - ${READARR_PORT}:8787
+      # Bazarr port
+      - ${BAZARR_PORT}:6767
+      # Nzbhydra port
+      - ${NZBHYDRA_PORT}:5076
+      # Jellyseerr port
+      - ${JELLYSEER_PORT}:5055
+      # Unpackerr port
+      - ${UNPACKERR_PORT}:5656
+      # Flaresolverr port
+      - ${FLARESOLVERR_PORT}:8191
+    command: /bin/bash
+    restart: unless-stopped
+    labels: # Add traefik routing
+      traefik.enable: true
+
+      # DONT CHANGE THE PORTS LAID OUT BELOW
+      # THEY CORRESPOND WITH THE INTERNAL PORTS
+      # THEY ARE ROUTED SECURELY THROUGH THE BRIDGE NETWORK
+
+      # traefik.http.routers.#^#.rule: Host(`#^#.${DOMAINNAME}`)
+      # traefik.http.routers.#^#.service: #^#
+      # traefik.http.services.#^#.loadbalancer.server.port: NUMBER
+      # traefik.http.services.#^#.loadbalancer.server.scheme: http or https
+
+      # QBT Web UI
+      traefik.http.routers.qbittorrent.rule: Host(`qbittorrent.${DOMAINNAME}`) || Host(`qbit.${DOMAINNAME}`)
+      traefik.http.routers.qbittorrent.service: qbittorrent
+      traefik.http.services.qbittorrent.loadbalancer.server.port: 8080
+      traefik.http.services.qbittorrent.loadbalancer.server.scheme: http
+    
+      # # Jackett Web UI
+      traefik.http.routers.jackett.rule: Host(`jackett.${DOMAINNAME}`)
+      traefik.http.routers.jackett.service: jackett
+      traefik.http.services.jackett.loadbalancer.server.port: 9117
+      traefik.http.services.jackett.loadbalancer.server.scheme: http
+
+      # Sonarr Web UI
+      traefik.http.routers.sonarr.rule: Host(`sonarr.${DOMAINNAME}`)
+      traefik.http.routers.sonarr.service: sonarr
+      traefik.http.services.sonarr.loadbalancer.server.port: 8989
+      traefik.http.services.sonarr.loadbalancer.server.scheme: http
+
+      # Radarr Web UI
+      traefik.http.routers.radarr.rule: Host(`radarr.${DOMAINNAME}`)
+      traefik.http.routers.radarr.service: radarr
+      traefik.http.services.radarr.loadbalancer.server.port: 7878
+      traefik.http.services.radarr.loadbalancer.server.scheme: http
+
+      # Lidarr Web UI
+      traefik.http.routers.lidarr.rule: Host(`lidarr.${DOMAINNAME}`)
+      traefik.http.routers.lidarr.service: lidarr
+      traefik.http.services.lidarr.loadbalancer.server.port: 8686
+      traefik.http.services.lidarr.loadbalancer.server.scheme: http
+
+      # Readarr Web UI
+      traefik.http.routers.readarr.rule: Host(`readarr.${DOMAINNAME}`)
+      traefik.http.routers.readarr.service: readarr
+      traefik.http.services.readarr.loadbalancer.server.port: 8787
+      traefik.http.services.readarr.loadbalancer.server.scheme: http
+
+      # Bazarr Web UI
+      traefik.http.routers.bazarr.rule: Host(`bazarr.${DOMAINNAME}`)
+      traefik.http.routers.bazarr.service: bazarr
+      traefik.http.services.bazarr.loadbalancer.server.port: 6767
+      traefik.http.services.bazarr.loadbalancer.server.scheme: http
+
+      # nzbhydra Web UI
+      traefik.http.routers.nzbhydra.rule: Host(`nzbhydra.${DOMAINNAME}`)
+      traefik.http.routers.nzbhydra.service: nzbhydra
+      traefik.http.services.nzbhydra.loadbalancer.server.port: 5076
+      traefik.http.services.nzbhydra.loadbalancer.server.scheme: http
+
+      # jellyseerr Web UI
+      traefik.http.routers.jellyseerr.rule: Host(`jellyseerr.${DOMAINNAME}`)
+      traefik.http.routers.jellyseerr.service: jellyseerr
+      traefik.http.services.jellyseerr.loadbalancer.server.port: 5055
+      traefik.http.services.jellyseerr.loadbalancer.server.scheme: http
+
+      # Unpackerr API
+      traefik.http.routers.unpackerr.rule: Host(`unpackerr.${DOMAINNAME}`)
+      traefik.http.routers.unpackerr.service: unpackerr
+      traefik.http.services.unpackerr.loadbalancer.server.port: 5656
+      traefik.http.services.unpackerr.loadbalancer.server.scheme: http
+
+  qbittorrent:
+    image: linuxserver/qbittorrent
+    container_name: qbittorrent
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -PUID: 0
+      -PGID: 0
+      -TZ: $TZ
+      # - UMASK_SET=022
+      -WEBUI_PORT: 8080
+    volumes:
+      - ${CONFIGDIR}/qbit:/config
+      - downloads:/downloads
+    network_mode: service:expressvpn
+    restart: unless-stopped
+    depends_on:
+      - expressvpn
+
+  flaresolverr: 
+    image: ghcr.io/flaresolverr/flaresolverr:latest 
+    container_name: flaresolverr 
+    network_mode: service:expressvpn
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment: 
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info} 
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=${FLARESOLVERR_CAPTCHA_SOLVER:-none} 
+      - TZ=$TZ
+    restart: unless-stopped
+    depends_on:
+      - expressvpn
+
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
+    volumes:
+      - ${CONFIGDIR}/jackett:/config
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+
+  nzbhydra:
+    image: lscr.io/linuxserver/nzbhydra2:latest
+    container_name: nzbhydra
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
+    volumes:
+      - ${CONFIGDIR}/nzbhydra:/config
+      - ${CONFIGDIR}/nzbhydra/downloads:/downloads
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+   
+  lidarr:
+    image: linuxserver/lidarr:latest
+    container_name: lidarr
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - TZ=$TZ
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIGDIR}/lidarr:/config
+      - music:/music
+      - downloads:/downloads
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - TZ=$TZ
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIGDIR}/radarr:/config
+      - movies:/movies
+      - downloads:/downloads
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      - TZ=$TZ
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIGDIR}/readarr:/config
+      - books:/books
+      - downloads:/downloads
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment:
+      -TZ: $TZ
+      -PUID: 1000
+      -PGID: 1000
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIGDIR}/sonarr:/config
+      - shows:/tv:rw
+      - downloads:/downloads:rw
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+      
+  bazarr: 
+    image: lscr.io/linuxserver/bazarr:latest 
+    container_name: bazarr 
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment: 
+      -TZ: $TZ
+    volumes: 
+      - ${CONFIGDIR}/bazarr:/config 
+      - shows:/mnt/tvshows
+      - movies:/mnt/movies 
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+
+  unpackerr:
+    image: golift/unpackerr
+    container_name: unpackerr
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    volumes:
+      # You need at least this one volume mapped so Unpackerr can find your files to extract.
+      # Make sure this matches your Starr apps; the folder mount (/downloads or /data) should be identical.
+      - downloads:/downloads
+      - ${CONFIGDIR}/unpackerr:/config
+    restart: always
+    network_mode: service:expressvpn
+    environment:
+      - TZ=$TZ
+      # General config
+      - UN_DEBUG=false
+      - UN_LOG_FILE=/config/unpackerr.log
+      - UN_LOG_FILES=10
+      - UN_LOG_FILE_MB=10
+      - UN_INTERVAL=2m
+      - UN_START_DELAY=1m
+      - UN_RETRY_DELAY=5m
+      - UN_MAX_RETRIES=3
+      - UN_PARALLEL=1
+      - UN_FILE_MODE=0644
+      - UN_DIR_MODE=0755
+      # Sonarr Config
+      - UN_SONARR_0_URL=http://sonarr:${SONARR_PORT}
+      - UN_SONARR_0_API_KEY=${SONARR_API_KEY}
+      - UN_SONARR_0_PATHS_0=/downloads
+      - UN_SONARR_0_PROTOCOLS=torrent
+      - UN_SONARR_0_TIMEOUT=10s
+      - UN_SONARR_0_DELETE_ORIG=false
+      - UN_SONARR_0_DELETE_DELAY=5m
+      # Radarr Config
+      - UN_RADARR_0_URL=http://radarr:${RADARR_PORT}
+      - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
+      - UN_RADARR_0_PATHS_0=/downloads
+      - UN_RADARR_0_PROTOCOLS=torrent
+      - UN_RADARR_0_TIMEOUT=10s
+      - UN_RADARR_0_DELETE_ORIG=false
+      - UN_RADARR_0_DELETE_DELAY=5m
+      # Lidarr Config
+      - UN_LIDARR_0_URL=http://lidarr:${LIDARR_PORT}
+      - UN_LIDARR_0_API_KEY=${LIDARR_API_KEY}
+      - UN_LIDARR_0_PATHS_0=/downloads
+      - UN_LIDARR_0_PROTOCOLS=torrent
+      - UN_LIDARR_0_TIMEOUT=10s
+      - UN_LIDARR_0_DELETE_ORIG=false
+      - UN_LIDARR_0_DELETE_DELAY=5m
+      # Readarr Config
+      - UN_READARR_0_URL=http://readarr:${READARR_PORT}
+      - UN_READARR_0_API_KEY=${READARR_API_KEY}
+      - UN_READARR_0_PATHS_0=/downloads
+      - UN_READARR_0_PROTOCOLS=torrent
+      - UN_READARR_0_TIMEOUT=10s
+      - UN_READARR_0_DELETE_ORIG=false
+      - UN_READARR_0_DELETE_DELAY=5m
+      # Folder Config
+      - UN_FOLDER_0_PATH=
+      - UN_FOLDER_0_EXTRACT_PATH=
+      - UN_FOLDER_0_DELETE_AFTER=10m
+      - UN_FOLDER_0_DELETE_ORIGINAL=false
+      - UN_FOLDER_0_DELETE_FILES=false
+      - UN_FOLDER_0_MOVE_BACK=false
+      # Webhook Config
+      - UN_WEBHOOK_0_URL=
+      - UN_WEBHOOK_0_NAME=
+      - UN_WEBHOOK_0_NICKNAME=Unpackerr
+      - UN_WEBHOOK_0_CHANNEL=
+      - UN_WEBHOOK_0_TIMEOUT=10s
+      - UN_WEBHOOK_0_SILENT=false
+      - UN_WEBHOOK_0_IGNORE_SSL=false
+      - UN_WEBHOOK_0_EXCLUDE_0=
+      - UN_WEBHOOK_0_EVENTS_0=0
+      - UN_WEBHOOK_0_TEMPLATE_PATH=
+      - UN_WEBHOOK_0_CONTENT_TYPE=application/json
+      # Command Hook Config
+      # - UN_CMDHOOK_0_COMMAND=
+      # - UN_CMDHOOK_0_NAME=
+      # - UN_CMDHOOK_0_TIMEOUT=10s
+      # - UN_CMDHOOK_0_SILENT=false
+      # - UN_CMDHOOK_0_SHELL=false
+      # - UN_CMDHOOK_0_EXCLUDE_0=
+      # - UN_CMDHOOK_0_EVENTS_0=0
+      # Web Server Config
+      - UN_WEBSERVER_METRICS=false
+      - UN_WEBSERVER_LISTEN_ADDR=0.0.0.0:${UNPACKERR_PORT}
+      - UN_WEBSERVER_LOG_FILE=
+      - UN_WEBSERVER_LOG_FILES=10
+      - UN_WEBSERVER_LOG_FILE_MB=10
+      - UN_WEBSERVER_SSL_CERT_FILE=
+      - UN_WEBSERVER_SSL_KEY_FILE=
+      - UN_WEBSERVER_URLBASE=/
+      - UN_WEBSERVER_UPSTREAMS=
+
+  jellyseerr: 
+    image: fallenbagel/jellyseerr:latest 
+    container_name: jellyseerr  
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    environment: 
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
+    volumes: 
+      - ${CONFIGDIR}/jellyseerr:/app/config 
+    restart: unless-stopped
+    network_mode: service:expressvpn
+    depends_on:
+      - expressvpn
+
+  youtubedl:
+    container_name: youtubedl
+    image: tzahi12345/youtubedl-material:latest
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    networks:
+      - traefik_network
+    environment: 
+      -ytdl_mongodb_connection_string: 'mongodb://ytdl-mongo-db:27017'
+      -ytdl_use_local_db: 'false'
+      -write_ytdl_config: 'true'
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
+    restart: unless-stopped
+    depends_on:
+      - ytdl-mongo-db
+      - expressvpn
+    volumes:
+      - ${CONFIGDIR}/youtubedl/config:/app/appdata
+      - ${CONFIGDIR}/youtubedl/subscriptions:/app/subscriptions
+      - ${CONFIGDIR}/youtubedl/users:/app/users
+      - youtubemusicdownloads:/app/audio
+      - youtubemoviedownloads:/app/video
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.youtubedl.rule=Host(`youtubedl.${DOMAINNAME}`)"
+      - "traefik.http.services.youtubedl.loadbalancer.server.port=17442"
+  
+  ytdl-mongo-db:
+    # If you are using a Raspberry Pi, use mongo:4.4.18
+    container_name: youtubedl-mongo-db
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:${LOKI_PORT}/loki/api/v1/push"
+    image: mongo:4
+    environment:
+      -PUID: 1000
+      -PGID: 1000
+      -TZ: $TZ
+    networks:
+      - traefik_network      
+    restart: unless-stopped
+    volumes:
+      - ${CONFIGDIR}/youtubedl/db/:/data/db

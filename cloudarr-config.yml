@@ -1,0 +1,933 @@
+################################################################
+#####
+#    ##  #        ####   #    #  #####     ##    #####   #####
+#        #       #    #  #    #  #    #   #  #   #    #  #    #
+#        #       #    #  #    #  #    #  #    #  #    #  #    #
+#    ##  #       #    #  #    #  #    #  ######  #####   #####
+#    #   #       #    #  #    #  #    #  #    #  #   #   #   #
+#####   ######   ####    ####   #####   #    #  #    #  #    #
+################################################################
+
+# CHANGES TO THIS FILE WILL NOT TAKE EFFECT UNTIL YOU RUN
+# `sudo python3 apply_config.py`
+
+# Cloudar's config system is a simplified combination of Traefik's
+# dynamic-config.yml, Authelia's configuration.yml
+# and Homepage's services.yml and settings.yml
+
+# Some changes, like those affecting Homepage or Traefik's
+# dynamic-config.yml will take effect immediately
+# Changes that affect traefik.yml or Authelia's configuration.yml
+# will not take effect until their respective container is restarted
+
+# Cloudarr's Traefik/Authelia containers have been pre-configured
+# to route http and https addresses automatically, pre-defined
+# TLS configurations have been created to support both new and
+# old local machines.
+#
+# There are several major fields in cloudar-config.yml:
+# - FIELD             AFFECTED FILE(S)            TAKES EFFECT
+# - homepage          homepage/services.yml       immediately after applied
+#                     homepage/settings.yml       immediately after applied
+#
+# - traefik           traefik/traefik.yml         after Traefik container restart
+#
+# - traefik-dynamic   traefik/dynamic-config.yml  immediately after applied
+#
+# - services          all above files             varies, see above
+#
+# - authelia          authelia/configuration.yml  after Authelia container restart
+
+# Homepage settings are basically 1:1 with gethomepage settings
+# The only change is layout items now have a "config" field where
+# the normal keys move to, and an "items" field which is a list of
+# prefixes configued in the "services" section of cloudarr-config below
+# See gethomepage settings for more info on gethomepage settings
+# https://gethomepage.dev/latest/configs/settings
+homepage:
+  title: $HOMEPAGE_TITLE
+  theme: $CLOUDARR_THEME
+  headerStyle: clean
+  fiveColumns: true
+  background:
+    # Built in electro-sphere background
+    # You can add files to $CONFIGDIR/homepage/images and update
+    # This field to add different backgrounds
+    image: /images/background_sphere.gif 
+    blur: sm # sm, "", md, xl... see https://tailwindcss.com/docs/backdrop-blur
+    saturate: 50 # 0, 50, 100... see https://tailwindcss.com/docs/backdrop-saturate
+    brightness: 75 # 0, 50, 75... see https://tailwindcss.com/docs/backdrop-brightness
+    opacity: 80 # 0-100
+  
+  # TODO:
+  # Add a tabs section where server admins can define user lists for the dashboard
+
+  layout:
+    ## SERVICES TAB
+    
+    - Media:
+      config:
+        style: row
+        columns: 4
+        useEqualHeights: true
+        tab: Services
+      items:
+        - jellyfin
+        - kavita
+        - navidrome
+        - audiobookshelf
+
+    - Services:
+      config:
+        style: row
+        columns: 4
+        useEqualHeights: true
+        tab: Services
+      items:
+        - it-tools
+        - vaultwarden
+        - redlib
+        - gitea
+        - guacamole
+        - miniflux
+        - jupyter
+        - prusa
+        - fdm-monster
+        - authelia
+        - homepage
+        - ldap-user-manager 
+
+    ## MEDIA MANAGEMENT TAB
+    - Qbittorrent:
+      config:
+        style: row
+        columns: 
+        useEqualHeights: true
+        tab: Management (requestersusers,advancedrequestersusers,mediaadmins)
+      items:
+        - qbittorrent
+
+    - Requesters:
+      config:
+        style: row
+        columns: 3
+        useEqualHeights: true
+        tab: Management (requestersusers,advancedrequestersusers,mediaadmins)
+      items:
+        - jellyseerr
+        - readarr
+        - lidarr
+        - sonarr
+        - radarr
+        - bazarr
+       
+    - Other Requesters:
+      config:
+        useEqualHeights: true
+        header: False
+        style: row
+        columns: 1
+        tab: Management (requestersusers,advancedrequestersusers,mediaadmins)
+      items:
+        - youtubedl
+    
+    - Media Admin:
+      config:
+        style: row
+        columns: 5
+        useEqualHeights: true
+        tab: Management (requestersusers,advancedrequestersusers,mediaadmins)
+      items:
+        - filebrowser
+        - filebot
+        - picard
+        - jackett
+        - nzbhydra
+    
+    ## ADMIN TAB
+    - Monitoring:
+      config:
+        style: row
+        columns: 3
+        useEqualHeights: true
+        tab: Admin (admins)
+        header: False
+      items:
+        - glances-info
+        - glances-cpu
+        - glances-process
+        - glances-net
+        - glances-disk
+        - glances-temp
+
+    - Status:
+      config:
+        style: row
+        columns: 4
+        useEqualHeights: true
+        tab: Admin (admins)
+      items:
+        - portainer
+        - whatsupdocker
+        - traefik
+        - adguard
+  
+    - Admin:
+      config:
+        style: row
+        columns: 5
+        useEqualHeights: true
+        tab: Admin (admins)
+      items:
+        - code-server
+        - homeassistant
+        - grafana
+        - uptime-kuma
+        - glances
+         
+# Traefik.yml static config
+# See https://doc.traefik.io/traefik/getting-started/configuration-overview/
+traefik:
+  log:
+    level: DEBUG
+    filepath: "traefik_logs/traefik.log"
+
+  api:
+    insecure: true
+    dashboard: true
+
+  entryPoints:
+    http:
+      address: ":80"
+
+    https:
+      address: ":443"
+      http:
+        tls:
+          certResolver: cloudflare
+          domains:
+            - main: $DOMAINNAME
+                sans:'*.$DOMAINNAME'
+        middlewares:
+          - authelia@docker
+
+  providers:
+    docker:
+      endpoint: "unix:///var/run/docker.sock"
+      exposedByDefault: false
+    file:
+      filename: "./dynamic-config.yml"
+      watch: true
+
+  certificatesResolvers:
+    cloudflare:
+      acme:
+        caServer: $CF_CA_SERVER
+        storage: acme/acme.json
+        email: $CF_API_EMAIL
+        dnsChallenge: true
+
+# Traefik dynamic-config.yml
+# See https://doc.traefik.io/traefik/getting-started/configuration-overview/
+# CLOUDARR ROUTES ARE DEFINED IN THE services SECTION BELOW OR IN THE COMPOSE FILE
+# ADDING ROUTES HERE WILL BREAK CLOUDARR's apply_config.py
+traefik-dynamic:
+  tls:
+    options:
+      modern:
+        minVersion: "VersionTLS13"     
+      intermediate:
+        minVersion: "VersionTLS12"
+        cipherSuites:
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+      old:
+        minVersion: "TLSv1"
+        cipherSuites: 
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+          - "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+          - "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+          - "TLS_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_RSA_WITH_AES_128_CBC_SHA256"
+          - "TLS_RSA_WITH_AES_128_CBC_SHA"
+          - "TLS_RSA_WITH_AES_256_CBC_SHA"
+          - "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+
+  http:
+    middlewares:
+      securityHeaders:
+        headers:
+          customResponseHeaders:
+            X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex"
+            X-Forwarded-Proto: "https"
+            server: ""
+          customRequestHeaders:
+            X-Forwarded-Proto: "https"
+            X-Forwarded-Ssl: on
+            X-Forwarded-Port: 443
+            X-Forwarded-Host: brewtools.dev
+          sslProxyHeaders:
+            X-Forwarded-Proto: "https"
+          referrerPolicy: "same-origin"
+          hostsProxyHeaders:
+            - "X-Forwarded-Host"
+          contentTypeNosniff: true
+          browserXssFilter: true
+          forceSTSHeader: true
+          stsIncludeSubdomains: true
+          stsSeconds: 63072000
+          stsPreload: true
+
+    ## TRANSPORTS ##
+    serversTransports:
+      insecureTransport: # Used to ignore inscure local servers.
+        # This can be used to proxy old devices that aren't being updated any more.
+        # Examples include routers, server remote access cards, etc. 
+        # You won't need to ever use this with a docker container
+        # If you change the name of this transport you will break cloudarr http support
+        insecureSkipVerify: true
+
+
+
+# Authlia configuration
+# See https://www.authelia.com/configuration/prologue/introduction/
+authelia:
+  theme: $CLOUDARR_THEME
+  log:
+    level: 'debug'
+    format: 'text'
+    file_path: '/config/authelia.log'
+    keep_stdout: false
+  authentication_backend:
+    ldap:
+      attributes:
+        group_name: cn
+      implementation: custom
+      address: ldap://openldap
+      start_tls: false
+
+      tls:
+        skip_verify: true
+        minimum_version: TLS1.2
+
+      base_dn: $LDAP_BASE_DN
+      additional_users_dn: ou=people
+      users_filter: (&({username_attribute}={input})(objectClass=person))
+      additional_groups_dn: ou=groups
+      groups_filter: (&(uniquemember={dn})(objectclass=groupOfUniqueNames))
+      user: cn=admin,$LDAP_BASE_DN
+      password: $LDAP_ADMIN_PASSWORD
+      
+  server:
+    address: 'tcp://:$AUTHELIA_PORT'
+    endpoints:
+      authz:
+        forward-auth:
+          implementation: "ForwardAuth"
+    buffers:
+      read: 4096
+      write: 4096
+
+  totp:
+    issuer: 'authelia.com'
+
+  identity_validation:
+    reset_password:
+      jwt_secret: '$AUTHELIA_JWT_SECRET'
+
+  session:
+    secret: '$AUTHELIA_SESSION_SECRET'
+
+    cookies:
+      - name: 'authelia_session' # Don't change this
+        domain: '$DOMAINNAME'
+        authelia_url: 'https://$AUTHELIA_PREFIX.$DOMAINNAME/'
+        expiration: '$AUTHELIA_SESSION_COOKIE_EXPIRATION'
+        inactivity: '$AUTHELIA_SESSION_COOKIE_INACTIVITY'
+        default_redirection_url: 'https://$AUTHELIA_DEFAULT_REDIRECT_URL_PREFIX.$DOMAINNAME/'
+        
+  regulation:
+    max_retries: $AUTHELIA_MAX_RETRIES
+    find_time: '$AUTHELIA_FIND_TIME'
+    ban_time: '$AUTHELIA_BAN_TIME'
+    
+  storage:
+    encryption_key: '$AUTHELIA_STORAGE_ENCRYPTION_KEY'
+    local:
+      path: '/config/db.sqlite3'
+
+  notifier:
+    filesystem:
+      filename: '/config/notification.txt'
+
+  access_control:
+    default_policy: 'one_factor'
+    # networks: # per-network policy settings
+    # - name: 'internal'
+    #   networks:
+    #   - '192.168.1.0/24'
+
+    rules:
+      # Bypass Authelia to prevent redirect loop
+      - domain: authelia.$DOMAINNAME
+        policy: bypass
+
+      # Bypass VaultWarden API (Otherwise the phone app doesn't work)
+      - domain: $VW_PREFIX.$DOMAINNAME
+        resources:
+          - '^/api([/?].*)?$'
+          - '^/notification([/?].*)?$'
+          - '^/accounts/login([/?].*)?$'
+          - '^/identity([/?].*)?$'
+        policy: bypass
+
+      # Bypass Subsonic API (Otherwise apps don't work)
+      - domain: music.$DOMAINNAME
+        resources:
+          - '^/rest([/?].*)?$'
+        policy: bypass
+
+# services:
+#   # - prefix, eg prefix.domain.com
+#   # If this config is for a docker container use the container name
+#   # This will not affect the Traefik compose label system
+#
+#   - portainer: # portainer.example.com
+#     # OPTIONAL | Gethomepage button name
+#     name: Portainer
+#     # OPTIONAL | Gethomepage button description
+#     description: Docker Container Manager
+#     # OPTIONAL | Associated Docker container if applicable
+#     container: portainer
+#     # OPTIONAL | Gethomepage icon
+#     # Configures a route's icon on the home page.
+#     # Defaults to the prefix if not set. Icon details found here:
+#     # https://gethomepage.dev/latest/configs/services/#icons
+#     icon: portainer
+#     widget: # OPTIONAL | Gethomepage widget
+#       # See https://gethomepage.dev/latest/widgets/ for widget info
+#       # Keys vary based on the specific widget
+#       # They are passed 1:1 to Homepage's services.yml
+#       # 'type' and 'url' are mandatory for all widgets
+#       type: portainer
+#       url: http://portainer:9000
+#       env: 1
+#       key: $PORTAINER_API_KEY
+#     access_control: # OPTIONAL | custom authelia access control system
+#       # Rules ordered in increasing priority
+#       # Rules are mapped group:access_policy
+#       # If an access rule other than one applying to "everybody"
+#       # is provided it is assumed that a rule to deny the "everybody"
+#       # group is desired  
+#       # - admins:one_factor
+#       
+#       # More complicated rules can be done in the 
+#       # Authelia access_control section of this file
+#
+#   # Local host example, no widget but with Traefik route
+#   - primary: # primary.example.com, host on the local network
+#       name: Primary
+#       # REQUIRED FOR LOCAL | Static IP Recommended, DNS name strongly discouraged
+#       # Will automatically configure http/https appropriately
+#       route: http://192.168.1.101/
+#       description: Primary Server (ESXi)
+#       icon: vmware-esxi
+#
+#   - secondary: # secondary.example.com, another host on the local network
+#       name: Secondary
+#       route: https://192.168.1.201/
+#       description: Secondary Server (Unraid)
+#       icon: unraid
+#       tls: modern
+#       # Disable tls cetificate verification by Traefik
+#       check_certificate: false
+
+services:
+  #### Built-in routes
+  # Unless specified by access_control a route will be accessible
+  # by all users with one_factor authentication
+  # Specifying any other access_control rule will apply everybody:deny
+  # unless the everybody group is mapped.
+  # Specifying any other access_control rule will apply admin:one_factor
+  # unless the admin group is mapped.
+  jackett:
+    name: Jackett
+    description: Torrent Indexer (mediaadmins) <VPN>
+    container: jackett
+    icon: jackett
+    access_control:
+      - mediaadmins:one_factor
+
+  nzbhydra:
+    name: Nzbhydra
+    description: Torrent Indexer (mediaadmins) <VPN>
+    container: nzbhydra
+    icon: nzbhydra
+    access_control:
+      - mediaadmins:one_factor
+
+  filebot:
+    name: FileBot
+    description: Video File Manager (mediaadmins)
+    container: filebot
+    icon: filebot
+    access_control:
+      - mediaadmins:one_factor
+
+  picard:
+    name: MusicBrainz Picard 
+    description: Music Manager (mediaadmins)
+    container: picard
+    icon: musicbrainz
+    access_control:
+      - jellyfinusers:one_factor
+
+  authelia:
+    name: Authelia 
+    description: Authentication Service
+    container: authelia
+    icon: authelia
+
+  homepage:
+    name: Homepage
+    description: Home Page
+    container: homepage
+    icon: homepage
+
+  grafana:
+    name: Grafana
+    description: Graphing and Metrics (admins)
+    container: grafana
+    icon: grafana
+    access_control:
+      - admins:one_factor
+
+  ldap-user-manager:
+    name: Ldap User Manager 
+    description: User/Password Manager
+    container: ldap-user-manager
+    icon: /images/ldap.png
+
+  traefik:
+    name: Traefik
+    description: Traefik Dashboard (admins)
+    container: traefik
+    icon: traefik
+    widget:
+      type: traefik
+      url: http://traefik:8080
+    access_control:
+      - admins:one_factor
+  
+  portainer:
+    name: Portainer (Docker)
+    description: Docker Container Manager (admins)
+    container: portainer
+    icon: portainer
+    widget:
+      type: portainer
+      url: http://portainer:9000
+      env: 1
+      key: $PORTAINER_API_KEY
+    access_control:
+      - admins:one_factor
+  
+  whatsupdocker:
+    name: WhatsUpDocker
+    description: Docker Container Update Manager (admins)
+    container: whatsupdocker
+    icon: wud
+    widget:
+      type: whatsupdocker
+      url: http://whatsupdocker:3000
+    access_control:
+      - admins:one_factor
+  
+  jupyter:
+    name: Jupyter Notebook
+    description: Python Data Science (admins)
+    container: jupyter
+    icon: jupyter
+    access_control:
+      - jupyterusers:one_factor
+
+  code-server:
+    name: VS Code Server
+    description: VS Code in a Browser (admins)
+    container: code-server
+    icon: vscode
+    access_control:
+      - admins:one_factor
+  
+  jellyfin:
+    name: Jellyfin
+    description: Video/Music Player (jellyfinusers)
+    container: jellyfin
+    icon: jellyfin
+    widget:
+      type: jellyfin
+      url: http://jellyfin:8096
+      key: $JELLYFIN_API_KEY
+    access_control:
+      - jellyfinusers:one_factor
+
+  kavita:
+    name: Kavita
+    description: Ebook Reader (mediausers)
+    container: kavita
+    icon: kavita
+    widget:
+      type: kavita
+      url: http://kavita:5000
+      username: $KAVITA_USERNAME
+      password: $KAVITA_PASSWORD
+    access_control:
+      - mediausers:one_factor
+    
+  navidrome:
+    name: Navidrome
+    description: Music Player / Server (mediausers)
+    container: navidrome
+    icon: navidrome
+    widget:
+      type: navidrome
+      user: $NAVIDROME_USERNAME
+      url: http://navidrome:4533
+      token: $NAVIDROME_TOKEN
+      salt: $NAVIDROME_SALT
+    access_control:
+      - mediausers:one_factor
+
+  audiobookshelf:
+    name: AudioBookshelf
+    description: Audiobook Player (mediausers)
+    container: audiobookshelf
+    icon: audiobookshelf
+    widget:
+      type: audiobookshelf
+      url: http://audiobookshelf:80
+      key: $AUDIOBOOKSHELF_API_KEY
+    access_control:
+      - mediausers:one_factor
+
+  qbittorrent:
+    name: Qbittorrent
+    description: Torrent Downloader (mediaadmins) <VPN>
+    container: qbittorrent
+    icon: qbittorrent
+    widget:
+      type: qbittorrent
+      url: http://0.0.0.0:3005
+      username: $QBITTORRENT_USERNAME
+      password: $QBITTORRENT_PASSWORD
+    access_control:
+      - mediaadmins:one_factor
+
+  jellyseerr:
+    name: Jellyseerr
+    description: Show and Movie Requester (requestersusers) <VPN>
+    container: jellyseerr
+    icon: jellyseerr
+    widget:
+      type: jellyseerr
+      url: http://expressvpn:5055
+      key: $JELLYSEERR_API_KEY
+    access_control:
+      - requesterusers:one_factor
+
+  readarr:
+    name: Readarr
+    description: Book Requester (advancedrequestersusers) <VPN>
+    container: readarr
+    icon: readarr
+    widget:
+      type: readarr
+      url: http://expressvpn:8787
+      key: $READARR_API_KEY
+    access_control:
+      - advancedrequesterusers:one_factor
+
+  lidarr:
+    name: Lidarr
+    description: Music Requester (advancedrequestersusers) <VPN>
+    container: lidarr
+    icon: lidarr
+    widget:
+      type: lidarr
+      url: http://expressvpn:8686
+      key: $LIDARR_API_KEY
+    access_control:
+      - advancedrequesterusers:one_factor
+
+  sonarr:
+    name: Sonarr
+    description: Show Requester (advancedrequestersusers) <VPN>
+    container: sonarr
+    icon: sonarr
+    widget:
+      type: sonarr
+      url: http://expressvpn:8989
+      key: $SONARR_API_KEY
+    access_control:
+      - advancedrequesterusers:one_factor
+
+  radarr:
+    name: Radarr
+    description: Movie Requester (advancedrequestersusers) <VPN>
+    container: radarr
+    icon: radarr
+    widget:
+      type: radarr
+      url: http://expressvpn:7878
+      key: $RADARR_API_KEY
+    access_control:
+      - advancedrequesterusers:one_factor
+
+  bazarr:
+    name: Bazarr
+    description: Subtitle Requester (advancedrequestersusers) <VPN>
+    container: bazarr
+    icon: bazarr
+    widget:
+      type: bazarr
+      url: http://expressvpn:6767
+      key: $BAZARR_API_KEY
+    access_control:
+      - advancedrequesterusers:one_factor
+
+  youtubedl:
+    name: YouTube-DL
+    description: YouTube Requester (requestersusers) <VPN>
+    container: youtubedl
+    icon: youtubedl
+    access_control:
+      - requesterusers:one_factor
+
+  guacamole:
+    name: Guacamole
+    description: Remote Desktop Web UI (guacamoleusers)
+    container: guacamole
+    icon: guacamole
+    access_control:
+      - guacamoleusers:one_factor
+
+  homeassistant:
+    name: HomeAssistant
+    description: Home Automation Service (admins)
+    container: homeassistant
+    icon: home-assistant
+    access_control:
+      - admins:one_factor
+
+  adguard:
+    name: AdGuard
+    description: Home Ad Blocking DNS (admins)
+    container: adguard
+    icon: adguard-home
+    widget:
+      type: adguard
+      url: http://adguard:80
+      username: $ADGUARD_USERNAME
+      password: $ADGUARD_PASSWORD
+    access_control:
+      - admins:one_factor
+
+  it-tools:
+    name: IT-Tools
+    description: IT/Dev Toolbox (serviceusers)
+    container: it-tools
+    icon: it-tools
+    access_control:
+      - serviceusers:one_factor
+
+  vaultwarden:
+    name: VaultWarden
+    description: Password Manager (serviceusers)
+    container: vaultwarden
+    icon: vaultwarden
+    access_control:
+      - serviceusers:one_factor
+
+  filebrowser:
+    name: Media File Browser
+    description: Media File Browser (mediaadmins)
+    container: filebrowser
+    icon: filebrowser
+    access_control:
+      - mediaadmins:one_factor
+
+  fdm-monster:
+    name: FDM Monster
+    description: 3D Print Farm Controller (printerusers)
+    container: fdm-monster
+    icon: mdi-printer-3d
+    access_control:
+      - printerusers:one_factor
+
+  prusa:
+    name: Prusa Slicer
+    description: 3D Print Slicer (printerusers)
+    container: prusa
+    icon: mdi-printer-3d-nozzle
+    access_control:
+      - printerusers:one_factor
+  
+  gitea:
+    name: Gitea
+    description: Version Management Ecosystem (gitusers)
+    container: gitea
+    icon: gitea
+    access_control:
+      - gitusers:one_factor
+  
+  redlib:
+    name: Redlib
+    description: Reddit Without Trackers (serviceusers)
+    container: redlib
+    icon: reddit
+    access_control:
+      - serviceusers:one_factor
+
+  miniflux:
+    name: Miniflux
+    description: Minimalist Feed Reader (serviceusers)
+    container: miniflux
+    icon: miniflux
+    access_control:
+      - serviceusers:one_factor
+
+  uptime-kuma:
+    name: Uptime Kuma
+    description: Status Monitoring (admins)
+    container: uptime-kuma
+    icon: uptime-kuma
+    access_control:
+      - admins:one_factor
+  
+  glances:
+    name: Glances
+    description: Local Host Monitoring (admins)
+    container: glances
+    icon: glances
+    access_control:
+      - admins:one_factor
+
+  glances-info:
+    name: Host Info
+    info: true
+    description:
+    container:
+    icon:
+    widget:
+      type: glances
+      url: http://glances:61208
+      version: 4
+      metric: info
+      diskUnits: bytes
+      refreshInterval: 1000
+      pointsLimit: 30
+    access_control:
+      - admins:one_factor
+  
+  glances-cpu:
+    name: CPU
+    info: true
+    description:
+    container:
+    icon:
+    widget:
+      type: glances
+      url: http://glances:61208
+      version: 4
+      metric: cpu
+      diskUnits: bytes
+      refreshInterval: 1000
+      pointsLimit: 30
+  
+  glances-process:
+    name: Processes
+    info: true
+    description:
+    container:
+    icon:
+    widget:
+      type: glances
+      url: http://glances:61208
+      version: 4
+      metric: process
+      refreshInterval: 1000
+      pointsLimit: 30
+  
+  glances-net:
+    name: Network
+    info: true
+    description:
+    container:
+    icon:
+    widget:
+      type: glances
+      url: http://glances:61208
+      version: 4
+      metric: network:eth0
+      refreshInterval: 1000
+      pointsLimit: 30
+  
+  glances-disk:
+    name: Disk
+    info: true
+    description:
+    container:
+    icon:
+    widget:
+      type: glances
+      url: http://glances:61208
+      version: 4
+      metric: disk:sda
+      diskUnits: bytes
+      refreshInterval: 5000
+      pointsLimit: 15
+ 
+  glances-temp:
+    name: CPU Temperature
+    info: true
+    description:
+    container:
+    icon:
+    widget:
+      type: glances
+      url: http://glances:61208
+      version: 4
+      metric: sensor:Composite
+      refreshInterval: 5000
+      pointsLimit: 15
+  #### End Built-in routes
+
+  #### Local routes
+  # EXAMPLE:
+  # secondary-portainer:
+  #   name: Portainer (Unraid)
+  #   route: http://192.168.1.201:9000/
+  #   description: Docker Container Manager (admins)
+  #   container: portainer
+  #   icon: portainer
+  #   widget:
+  #     type: portainer
+  #     url: http://192.168.1.201:9000
+  #     env: 1
+  #     key: 
+  #   access_control:
+  #     - admins:one_factor

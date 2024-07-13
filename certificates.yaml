@@ -1,0 +1,4 @@
+tls:
+  certificates:
+    - certFile: /cloudflare_certs/${DOMAINNAME}.crt
+    - keyFile:  /cloudflare_certs/${DOMAINNAME}.key
