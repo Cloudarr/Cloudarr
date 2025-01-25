@@ -21,6 +21,7 @@ This project assumes a few things:
 - You are using a modern version of Docker and Docker Compose
 - You are using a modern version of Ubuntu (Might work on WSL but not officially supported).
 - You want a single domain self-hosted cloud setup. Support for multiple domains is not planned.
+- You are using Cloudflare for your DNS records. Other providers will work, but some of the containers to update your records only work with Cloudflare
 
 This project needs a few things in the long term:
 - Authelia OIDC Setup
@@ -33,6 +34,7 @@ This project needs a few things in the long term:
 ### Helpful Links
 - Traefik Documentation: https://doc.traefik.io/traefik/
 - Authelia Documentation: https://www.authelia.com/configuration/prologue/introduction/
+- Jellyfin Backup/Recovery Documentation: https://jellyfin.org/docs/general/administration/backup-and-restore
 - The it-tools website has a number of great tools that can make setting this project up easier: https://it-tools.tech/
 
 ***
